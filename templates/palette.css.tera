@@ -1,0 +1,12 @@
+{% for palette in palettes %}
+
+{{ palette.selector }} {
+  {% for token in palette.tokens %}
+    {{ self::design_token(palette_name=palette.name, tone=token.tone, value=token.value) }}
+  {% endfor %}
+}
+
+{% endfor %}
+{% macro design_token(palette_name, tone, value) %}
+  --color-{{ palette_name }}-{{ tone }}: {{ value }};
+{% endmacro design_token %}

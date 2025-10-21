@@ -1,16 +1,9 @@
+use bigcolor::{BigColor, color_space::{OKLCH}};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, from_str};
 use tera::{Tera, Context};
-use std::{fmt::format, fs, ops::Add, path::{Path, PathBuf}};
-use color::{
-  parse_color,
-  OpaqueColor,
-  DynamicColor,
-  Oklch,
-  Srgb,
-  DisplayP3
-};
+use std::{collections::HashMap, fmt::format, fs, ops::Add, path::{Path, PathBuf}};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "", long_about = None)]
@@ -33,37 +26,20 @@ struct ThemeConfig {
   // #[serde(default)]
   default: bool,
   prefix: Option<String>,
-  color_space: Vec<String>,
-  tones: Vec<u8>,
-  palettes: Map<String, Value>
+  tones: Option<Vec<u8>>,
+  palettes: HashMap<String, PaletteConfig>
 }
 
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "snake_case")]
-struct ThemeContext {
-  selector: String,
-  color_spaces: Vec<ColorspaceContext>,
-  palettes: Vec<PaletteContext>
+#[derive(Deserialize, Debug)]
+struct PaletteConfig {
+  base: String,
+  variant: String
 }
 
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "snake_case")]
-struct ColorspaceContext {
-  name: String,
-  selector: String,
-  tokens: Vec<String>
-}
-
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "snake_case")]
-struct PaletteContext {
-  name: String,
-  tokens: Map<String, Value>
-}
-
-const COLOR_TOKEN_TEMPLATE: &str = "--{% if prefix %}{{ prefix }}-{% endif %}-{{ tone }}: {{ color_value }};";
-const COLOR_BASE_TEMPLATE: &str = "--{% if prefix %}{{ prefix }}-{% endif %}-{{ palette_name }}: {{ color_value }};";
-const COLOR_KEY_TEMPLATE: &str = "{% if prefix %}{{ prefix }}-{% endif %}-{{ palette_name }}-key: {{ palette_key }};";
+const DEFAULT_TONE_KEYS: [u8; 11] = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95];
+const COLOR_TOKEN_TEMPLATE: &str = "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-{{ tone }}";
+const COLOR_BASE_TEMPLATE: &str = "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}";
+const COLOR_KEY_TEMPLATE: &str = "{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-key";
 
 pub fn main() -> anyhow::Result<()> {
   let cli = Cli::parse();
@@ -72,21 +48,33 @@ pub fn main() -> anyhow::Result<()> {
   let config_text = fs::read_to_string(&config_path)?;
   let config: Config = from_str(&config_text)?;
 
+  let mut tera = Tera::new("templates/*.tera")?;
+  tera.add_raw_templates(vec![
+    ("COLOR_TOKEN", COLOR_TOKEN_TEMPLATE),
+    ("COLOR_BASE", COLOR_BASE_TEMPLATE),
+    ("COLOR_KEY", COLOR_KEY_TEMPLATE)
+  ])?;
+
   for theme in config.themes {
     let is_default = theme.default;
     let prefix = theme.prefix;
+    let tones = theme.tones.unwrap_or(DEFAULT_TONE_KEYS.to_vec());
 
-    for (key, value) in &theme.palettes {
-      let base_dyn = parse_color(value.as_str().unwrap()).expect("Invalid color string");
-      let base_oklch = base_dyn.convert(color::ColorSpaceTag::Oklch);
-      print!("{}", base_oklch);
-      let [h, c, l, a] = base_oklch.components;
-      let mut tokens = Vec::<String>::new();
+    for (key, palette_config) in &theme.palettes {
+      let base_color = BigColor::new(&palette_config.base);
 
-      for tone in theme.tones.iter() {
-        print!("{}", *tone as f32);
-        let variant = OpaqueColor::<Oklch>::new([h, c, *tone as f32]);
-        print!("{}\n", variant.to_rgba8())
+      let scale = base_color.monochromatic(Some(tones.len()));
+      let mut scale_tokens = HashMap::new();
+      
+      for (index, color) in scale.iter().enumerate() {
+        let tone = tones.get(index).unwrap();
+        let mut context = Context::new();
+        context.insert("prefix", &prefix);
+        context.insert("palette_name", &key);
+        context.insert("tone", &format!("{:02}", tone));
+        context.insert("color_value", &color.to_hex_string(false));
+        let rendered = tera.render("COLOR_TOKEN", &context)?;
+        scale_tokens.insert(rendered, color.to_hex_string(false));
       }
     }
   }
@@ -94,82 +82,59 @@ pub fn main() -> anyhow::Result<()> {
   Ok(())
 }
 
-// fn create_theme_context(theme: &ThemeConfig) -> anyhow::Result<ThemeContext> {
-//   let selector = format!(".palette-{}", theme.name);
+fn create_scale_tokens(scale: &Vec<BigColor>, tones: Vec<u8>, prefix: Option<String>) -> anyhow::Result<HashMap<u8, String>> {
+  let mut tokens = HashMap::<u8, String>::new();
 
-//   let color_spaces = theme.color_space.iter().map(|cs| {
-//     ColorspaceContext {
-//       name: cs.clone(),
-//       selector: format!("{}.{}", selector, cs)
-//     }
-//   }).collect();
+  for (index, color) in scale.iter().enumerate() {
 
-//   let palettes = theme.palettes.iter().map(|(name, tokens)| {
-//     PaletteContext {
-//       name: name.clone(),
-//       tokens: match tokens.as_object() {
-//         Some(map) => map.clone(),
-//         None => Map::new()
-//       }
-//     }
-//   }).collect();
+  }
 
-//   Ok(ThemeContext {
-//     selector,
-//     color_spaces,
-//     palettes
-//   })
-// }
+  Ok(tokens)
+}
 
-// fn main() -> anyhow::Result<()> {
-//   let cli = Cli::parse();
+fn closest_tone(base_color: &BigColor, palette: &Vec<BigColor>) -> anyhow::Result<BigColor> {
+  let base_oklch = base_color.to_oklch();
 
-//   let config_path = cli.config.canonicalize()?;
-//   let config_dir = config_path.parent().unwrap_or(Path::new("."));
-//   let config_text = fs::read_to_string(&config_path)?;
-//   let config: Config = from_str(&config_text)?;
+  let closest = palette
+    .iter()
+    .min_by(|a, b| {
+      (a.to_oklch().l - base_oklch.l)
+        .abs()
+        .partial_cmp(&(b.to_oklch().l - base_oklch.l).abs())
+        .unwrap()
+    })
+    .unwrap_or(palette.get(palette.len() / 2).unwrap());
 
-//   let tera = Tera::new("templates/*.tera")?;
+  Ok(closest.clone())
+}
 
-//   for theme in config.themes {
-//     let out_dir = normalize_out_dir(config_dir, &config.out_dir);
-//     fs::create_dir_all(&out_dir)?;
+fn tonal_palette(base_hex: &str, tones: &[f32]) -> anyhow::Result<Vec<(f32, String)>> {
+  let base = BigColor::from_string(base_hex).unwrap();
+  let base_oklch = base.to_oklch();
 
-//     let context = create_context(&theme)?;
-//     let theme_out = out_dir.join(format!("{}.css", theme.name));
-//     let rendered = tera.render("theme.css.tera", &context)?;
-//     fs::write(theme_out, rendered)?;
-//   }
+  let mut palette = Vec::with_capacity(tones.len());
+  for &tone in tones {
+    let l = tone / 100.0;
+    let chroma_scale = ((l * (1.0 - l)) * 4.0).powf(0.6);
+    let adjusted_c = base_oklch.c * chroma_scale.clamp(0.0, 1.0);
 
-//   Ok(())
-// }
+    let tone_oklch = OKLCH {
+      l,
+      c: adjusted_c,
+      h: base_oklch.h,
+      alpha: base_oklch.alpha
+    };
+    let (l, c, h, alpha) = (tone_oklch.l, tone_oklch.c, tone_oklch.h, tone_oklch.alpha);
 
-// fn create_context(theme: &ThemeConfig) -> anyhow::Result<Context> {
-//   let mut context = Context::new();
-//   context.insert("srgb", "");
-//   context.insert("p3", "");
-//   context.insert("selector", &format!(".palette-{}", theme.name));
-//   context.insert("theme_name", &theme.name);
-//   context.insert("description", &theme.description);
-//   Ok(context)
-// }
+    let fitted = BigColor::from_oklch(l, c, h, alpha).to_hex_string(false);
+    palette.push((tone, fitted));
+  }
 
-// fn create_semantic_context(
-//   semantic_name: &str,
-//   palette_name: &str,
-//   theme: &ThemeConfig,
-// ) -> anyhow::Result<Context> {
-//   let mut context = Context::new();
-//   context.insert("semantic_name", semantic_name);
-//   context.insert("palette_name", palette_name);
-//   Ok(context)
-// }
+  Ok(palette)
+}
 
-// fn normalize_out_dir(config_dir: &Path, out: &str) -> PathBuf {
-//   let p = Path::new(out);
-//   if p.is_absolute() {
-//     p.to_path_buf()
-//   } else {
-//     config_dir.join(p)
-//   }
-// }
+fn create_theme_context() {}
+
+fn create_palette_context() {}
+
+fn create_variant_context() {}
