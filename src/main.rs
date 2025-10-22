@@ -1,100 +1,203 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use clap::Parser;
 use anyhow::{bail, Context as A_Context, Result};
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use bigcolor::{BigColor, color_space::{OKLCH}};
-use tera::{Tera, Context as T_Context};
 use serde_json::from_str;
+use tera::Tera;
 
-#[derive(Parser, Debug)]
-struct Cli {
-  config: PathBuf
+use crate::config::{Cli, PaletteConfig};
+
+mod config;
+mod app;
+
+lazy_static! {
+  pub static ref TEMPLATES: Tera = {
+    let mut tera = match Tera::new("templates/*.tera") {
+      Ok(t) => t,
+      Err(e) =>  {
+        println!("Parsing error(s): {}", e);
+        std::process::exit(1);
+      }
+    };
+
+    tera.add_raw_template("COLOR_TOKEN", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-{{ tone }}").unwrap();
+    tera.add_raw_template("COLOR_BASE", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}").unwrap();
+    tera.add_raw_template("COLOR_KEY", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-key").unwrap();
+
+    tera
+  };
 }
 
-#[derive(Deserialize, Debug)]
-struct PaletteConfig {
-  base: String,
-  variant: Option<String>
+fn tonal_steps() -> [u8; 11] {
+  [05, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95]
 }
 
-#[derive(Deserialize, Debug)]
-struct ThemeConfig {
-  name: String,
-  default: Option<bool>,
+struct CSSColorToken {
   prefix: Option<String>,
-  description: Option<String>,
-  palettes: std::collections::BTreeMap<String, PaletteConfig>
+  palette_name: String,
+  tone: u8,
+  value: BigColor
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-struct Config {
-  out_dir: String,
-  themes: Vec<ThemeConfig>
-}
-
-#[derive(Serialize, Debug)]
-struct Palette {
-  name: String,
-  base: (String, String),
-  key: (String, String),
-  tokens: std::collections::BTreeMap<u8, (String, String)>
-}
-
-const COLOR_TOKEN_TEMPLATE: &str = "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-{{ tone }}";
-const COLOR_BASE_TEMPLATE: &str = "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}";
-const COLOR_KEY_TEMPLATE: &str = "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-key";
-
-fn tonal_steps() -> Vec<u8> {
-  vec![05, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95]
-}
-
-fn main() -> Result<()> {
-  let cli = Cli::parse();
-  let config_path = cli.config.canonicalize()?;
-  let config_dir = config_path.parent().unwrap_or(Path::new("."));
-  let config_raw = fs::read_to_string(&config_path)?;
-  let config: Config = from_str(&config_raw)?;
-  let mut tera = Tera::new("templates/*.tera")?;
-
-  tera.add_raw_templates([
-    ("COLOR_TOKEN", COLOR_TOKEN_TEMPLATE),
-    ("COLOR_BASE", COLOR_BASE_TEMPLATE),
-    ("COLOR_KEY", COLOR_KEY_TEMPLATE)
-  ])?;
-
-  for theme in config.themes {
-    let name = theme.name;
-    let is_default = theme.default.unwrap_or(false);
-    let prefix = theme.prefix.unwrap_or_default();
-    let description = theme.description.unwrap_or_default();
-    
-    for (palette_name, palette_config) in theme.palettes {
-      let base_color = BigColor::new(palette_config.base);
-      let for_variant = palette_config.variant.unwrap();
-
-      let mut palette_context = T_Context::new();
-      palette_context.insert("prefix", prefix.as_str());
-      palette_context.insert("palette_name", palette_name.as_str());
-
-      let scale = base_color.monochromatic(Some(tonal_steps().len()));
-      let key_color = closest_to_base(&base_color, &scale)?;
-
-      // let mut palette = Palette {
-      //   base: (
-      //     tera.render("COLOR_BASE", &palette_context)?.to_string(),
-      //     base_color.to_hex_string(false)
-      //   )
-      // };
+impl CSSColorToken {
+  fn new(prefix: Option<String>, palette_name: String, tone: u8, value: BigColor) -> Self {
+    Self {
+      prefix,
+      palette_name,
+      tone,
+      value
     }
   }
 
+  fn to_string(&self, with_value: bool) -> String {
+    let mut context = tera::Context::new();
+    context.insert("prefix", &self.prefix);
+    context.insert("palette_name", &self.palette_name);
+    context.insert("tone", format!("{:02}", self.tone).as_str());
+
+    let mut token = TEMPLATES.render("COLOR_TOKEN", &context).unwrap();
+
+    if with_value {
+      token = format!("{}: {};", token, self.value.to_oklch_string());
+    }
+
+    token
+  }
+}
+
+struct CSSBaseToken {
+  prefix: Option<String>,
+  palette_name: String,
+  value: String,
+}
+
+impl CSSBaseToken {
+  fn new(prefix: Option<String>, palette_name: String, value: String) -> Self {
+    Self {
+      prefix,
+      palette_name,
+      value
+    }
+  }
+
+  fn to_string(&self) -> String {
+    let mut context = tera::Context::new();
+    context.insert("prefix", &self.prefix);
+    context.insert("palette_name", &self.palette_name);
+
+    let mut token = TEMPLATES.render("COLOR_BASE", &context).unwrap();
+    token = format!("{}: {};", token, self.value);
+
+    token
+  }
+}
+
+struct CSSKeyToken {
+  prefix: Option<String>,
+  palette_name: String,
+  value: u8,
+}
+
+impl CSSKeyToken {
+  fn new(prefix: Option<String>, palette_name: String, value: u8) -> Self {
+    Self {
+      prefix,
+      palette_name,
+      value
+    }
+  }
+
+  fn to_string(&self) -> String {
+    let mut context = tera::Context::new();
+    context.insert("prefix", &self.prefix);
+    context.insert("palette_name", &self.palette_name);
+
+    let mut token = TEMPLATES.render("COLOR_KEY", &context).unwrap();
+    token = format!("{}: {};", token, format!("{:02}", self.value));
+
+    token
+  }
+}
+
+fn generate_palette_css(palette: &PaletteConfig) -> Result<(), Box<dyn std::error::Error>> {
+
+}
+
+fn generate_variant_css(variant: &str) -> Result<(), Box<dyn std::error::Error>> {
+
+}
+
+fn generate_theme_css(theme: &config::ThemeConfig) -> Result<(), Box<dyn std::error::Error>> {
+
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let cli = Cli::parse();
+  app::App::new()
+    .load_config(&cli)?
+    .validate()?
+    .generate_css()?;
+
   Ok(())
 }
+
+// fn main() -> Result<()> {
+//   let cli = Cli::parse();
+//   init_config(&cli);
+
+//   for theme in &CONFIG.get().unwrap().themes {
+//     println!("Theme: {}", theme.name);
+
+//     for (palette_name, palette_config) in &theme.palettes {
+//       println!("  Palette: {}", palette_name);
+//       println!("    Base Color: {}", palette_config.base);
+
+//       let source_color = BigColor::new(&palette_config.base);
+//       let source_scale = source_color.monochromatic(Some(tonal_steps().len()));
+
+//       let mut color_tokens: Vec<CSSColorToken> = vec![];
+
+//       for (index, color) in source_scale.iter().enumerate() {
+//         let tone = tonal_steps()[index];
+//         let token = CSSColorToken::new(
+//           theme.prefix.clone(),
+//           palette_name.clone(),
+//           tone,
+//           color.clone()
+//         );
+
+//         color_tokens.push(token);
+//       }
+//       let key_color = closest_to_base(&source_color, &source_scale)?;
+//       let key_tone = source_scale.iter().position(|c| c == &key_color).unwrap();
+
+//       let key_token = CSSKeyToken::new(
+//         theme.prefix.clone(),
+//         palette_name.clone(),
+//         tonal_steps()[key_tone]
+//       );
+
+//       let base_token = CSSBaseToken::new(
+//         theme.prefix.clone(),
+//         palette_name.clone(),
+//         key_color.to_oklch_string()
+//       );
+//       println!("    {}", key_token.to_string());
+//       println!("    {}", base_token.to_string());
+
+
+//       if let Some(variant) = &palette_config.variant {
+//       }
+//     }
+//   }
+
+//   Ok(())
+// }
 
 fn closest_to_base(base: &BigColor, palette: &Vec<BigColor>) -> anyhow::Result<BigColor> {
   let base_oklch = base.to_oklch();
@@ -109,8 +212,4 @@ fn closest_to_base(base: &BigColor, palette: &Vec<BigColor>) -> anyhow::Result<B
     .unwrap_or(palette.get(palette.len() / 2).unwrap());
 
   Ok(closest.clone())
-}
-
-fn collect_palette_tokens() -> anyhow::Result<()> {
-  Ok(())
 }
