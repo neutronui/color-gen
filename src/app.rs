@@ -1,21 +1,21 @@
 use std::{fs, path::PathBuf};
 use serde_json::from_str;
-use crate::config::{self, Cli};
+use crate::{config::{self, Cli}, css::generate_palette_css};
 
 pub struct App<State> {
   state: State
 }
 
-struct Uninitialized;
-struct ConfigLoaded {
+pub struct Uninitialized;
+pub struct ConfigLoaded {
   config: config::Config
 }
 
-struct Validated {
+pub struct Validated {
   config: config::Config
 }
 
-struct Generated {
+pub struct Generated {
   config: config::Config,
   css_files: Vec<PathBuf>
 }
@@ -52,6 +52,20 @@ impl App<Validated> {
     let mut css_files = Vec::new();
 
     // TODO: Implement CSS generation logic
+    for theme in &self.state.config.themes {
+      for (palette_name, palette_config) in &theme.palettes {
+        let palette = generate_palette_css(&palette_name, &palette_config)
+          .expect("Failed to generate palette CSS");
+
+        print!("/* Palette: {} */\n", palette_name);
+        print!("{}\n", palette.base.to_string());
+        for (tone, token) in &palette.tokens {
+          print!("{}\n", token.to_string(true));
+        }
+        print!("{}\n", palette.key.to_string());
+        println!("{}\n", palette.for_variant.unwrap());
+      }
+    }
 
     Ok(App {
       state: Generated {
