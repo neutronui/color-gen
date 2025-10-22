@@ -45,7 +45,7 @@ pub fn main() -> anyhow::Result<()> {
   let cli = Cli::parse();
   let config_path = cli.config.canonicalize()?;
   let config_dir = config_path.parent().unwrap_or(Path::new("."));
-  let config_text = fs::read_to_string(&config_path)?;
+  let config_text: String = fs::read_to_string(&config_path)?;
   let config: Config = from_str(&config_text)?;
 
   let mut tera = Tera::new("templates/*.tera")?;
@@ -86,7 +86,14 @@ fn create_scale_tokens(scale: &Vec<BigColor>, tones: Vec<u8>, prefix: Option<Str
   let mut tokens = HashMap::<u8, String>::new();
 
   for (index, color) in scale.iter().enumerate() {
+    let tone = tones.get(index).unwrap();
+    let token = if let Some(ref p) = prefix {
+      format!("--{}-color-{:02}", p, tone)
+    } else {
+      format!("--color-{:02}", tone)
+    };
 
+    
   }
 
   Ok(tokens)
