@@ -31,16 +31,12 @@ enum TokenState {
   Rendered(String)
 }
 
-trait TokenStateBehavior: Sized {
-  fn new() -> Self {
-    TokenState::Uninitialized;
-
-    TokenStateBehavior::new()
-  }
+pub trait TokenStateBehavior: Sized {
+  
 }
 
 impl TokenStateBehavior for TokenState {
-
+  
 }
 
 
