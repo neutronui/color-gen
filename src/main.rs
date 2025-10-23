@@ -3,7 +3,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
-use anyhow::{bail, Context as A_Context, Result};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
@@ -12,6 +11,7 @@ use serde_json::from_str;
 use tera::Tera;
 
 use crate::config::{Cli, PaletteConfig};
+use crate::app::{StateBehavior};
 
 mod config;
 mod app;
@@ -45,10 +45,18 @@ lazy_static! {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let cli = Cli::parse();
-  app::App::new()
-    .load_config(&cli)?
-    .validate()?
-    .generate_css()?;
+  let mut app_state = app::AppState::Uninitialized;
+
+  app_state = app_state.load_config(&cli)?;
+  app_state = app_state.validate()?;
+  app_state = app_state.generate_css()?;
+
+  if let app::AppState::Generated(_, css_files) = app_state {
+    println!("Generated CSS files:");
+    for file in css_files {
+      println!("- {}", file.display());
+    }
+  }
 
   Ok(())
 }

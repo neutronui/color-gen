@@ -8,6 +8,43 @@ fn tonal_steps() -> [u8; 11] {
   [05, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95]
 }
 
+enum TokenType {
+  Color,
+  Base,
+  Key
+}
+
+impl TokenType {
+  fn as_str(&self) -> &str {
+    match self {
+      TokenType::Color => "COLOR_TOKEN",
+      TokenType::Base => "COLOR_BASE",
+      TokenType::Key => "COLOR_KEY",
+    }
+  }
+}
+
+enum TokenState {
+  Uninitialized,
+  WithoutValue(String),
+  WithValue,
+  Rendered(String)
+}
+
+trait TokenStateBehavior: Sized {
+  fn new() -> Self {
+    TokenState::Uninitialized;
+
+    TokenStateBehavior::new()
+  }
+}
+
+impl TokenStateBehavior for TokenState {
+
+}
+
+
+
 pub struct CSSColorToken {
   prefix: Option<String>,
   palette_name: String,
@@ -48,7 +85,7 @@ pub struct CSSBaseToken {
 }
 
 impl CSSBaseToken {
-  fn new(prefix: Option<String>, palette_name: String, value: String) -> Self {
+  fn new(prefix: Option<String>, palette_name: String, value: String) -> Self {    
     Self {
       prefix,
       palette_name,
