@@ -62,14 +62,19 @@
 //   Ok(())
 // }
 
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::{Path, PathBuf}};
 use clap::Parser;
 use serde::Deserialize;
 use serde_json::from_str;
 
 #[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
 pub struct Cli {
-  pub config: PathBuf
+  #[arg(short, long, value_name = "FILE_PATH")]
+  pub config: PathBuf,
+
+  #[arg(short, long, action = clap::ArgAction::Count)]
+  debug: u8,
 }
 
 
@@ -133,11 +138,11 @@ pub trait GeneratePalettes {
 }
 
 pub trait EmitPaletteCss {
-  fn emit_palette_css(self) -> PaletteCssReady;
+  fn emit_palette_css(self, out_dir: &str) -> PaletteCssReady;
 }
 
 pub trait EmitVariantCss {
-  fn emit_variant_css(self) -> VariantCssReady;
+  fn emit_variant_css(self, out_dir: &str) -> VariantCssReady;
 }
 
 impl Validate for RawConfig {
@@ -177,7 +182,7 @@ impl GeneratePalettes for ValidatedConfig {
 }
 
 impl EmitPaletteCss for GeneratedPalettes {
-  fn emit_palette_css(self) -> PaletteCssReady {
+  fn emit_palette_css(self, out_dir: &str) -> PaletteCssReady {
     for theme in &self.0 {
       let mut css = String::new();
       css.push_str(&format!(".palette-{} {{\n", theme.name));
@@ -185,14 +190,14 @@ impl EmitPaletteCss for GeneratedPalettes {
       for palette in &theme.palettes {
         for tone in &palette.tones {
           css.push_str(&format!(
-            "--color-{}-{:02}: #PLACEHOLDER;\n",
+            "--color-{}-{:02}: #000000;\n",
             palette.name, tone
           ));
         }
       }
 
       css.push_str("}\n");
-      std::fs::write(format!("{}/{}.css", self.0[0].name, theme.name), css)
+      std::fs::write(format!("{}/{}.css", out_dir, theme.name), css)
         .expect("Failed to write css file");
     }
 
@@ -201,7 +206,7 @@ impl EmitPaletteCss for GeneratedPalettes {
 }
 
 impl EmitVariantCss for PaletteCssReady {
-  fn emit_variant_css(self) -> VariantCssReady {
+  fn emit_variant_css(self, out_dir: &str) -> VariantCssReady {
     let mut variants: HashMap<String, Vec<&Palette>> = HashMap::new();
 
     for theme in &self.0 {
@@ -212,9 +217,9 @@ impl EmitVariantCss for PaletteCssReady {
       }
     }
 
-    let mut css = String::new();
-
+    
     for (variant, palettes) in &variants {
+      let mut css = String::new();
       for palette in palettes {
         let selector = if palette.is_variant_default {
           format!(":where(:root),\n .{}-{} {{\n", variant, palette.name)
@@ -227,7 +232,7 @@ impl EmitVariantCss for PaletteCssReady {
         for tone in &palette.tones {
           css.push_str(&format!(
             "--color-{}-{:02}: var(--color-{}-{:02});\n",
-            palette.name, tone, palette.name, tone
+            variant, tone, palette.name, tone
           ));
         }
 
@@ -241,12 +246,22 @@ impl EmitVariantCss for PaletteCssReady {
         ));
         css.push_str("}\n\n");
       }
+
+      std::fs::write(format!("{}/{}.css", out_dir, variant), css)
+        .expect("Failed to write variant css file");
     }
 
-    std::fs::write("variants.css", css)
-      .expect("Failed to write variant css file");
 
     VariantCssReady()
+  }
+}
+
+fn normalize_out_dir(config_dir: &Path, out: &str) -> PathBuf {
+  let p = Path::new(out);
+  if p.is_absolute() {
+    p.to_path_buf()
+  } else {
+    config_dir.join(p)
   }
 }
 
@@ -255,8 +270,13 @@ fn main() {
   let data = fs::read_to_string(&cli.config).unwrap();
   let config: Config = from_str(&data).unwrap();
   let raw: RawConfig = RawConfig(config);
+  let config_dir = &cli.config.parent().unwrap_or(Path::new("."));
+  let out_dir = normalize_out_dir(config_dir, &raw.0.out_dir);
+  fs::create_dir_all(&out_dir).expect("Failed to create output directory");
+
+  
   let validated = raw.validate();
   let palettes = validated.generate_palettes();
-  let palettes_ready = palettes.emit_palette_css();
-  let _variants_ready = palettes_ready.emit_variant_css();
+  let palettes_ready = palettes.emit_palette_css(&out_dir.to_str().unwrap());
+  let _variants_ready = palettes_ready.emit_variant_css(&out_dir.to_str().unwrap());
 }
