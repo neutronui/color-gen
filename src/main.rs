@@ -62,10 +62,27 @@
 //   Ok(())
 // }
 
+
 use std::{collections::HashMap, fs, path::{Path, PathBuf}};
 use clap::Parser;
+use lazy_static::lazy_static;
 use serde::Deserialize;
 use serde_json::from_str;
+use tera::Tera;
+
+lazy_static! {
+  static ref TEMPLATES: Tera = {
+    let mut tera = match Tera::new("templates/*.tera") {
+      Ok(t) => t,
+      Err(e) => {
+        println!("Parsing error(s): {}", e);
+        std::process::exit(1);
+      }
+    };
+    
+    tera
+  };
+}
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]

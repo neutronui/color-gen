@@ -1,0 +1,8 @@
+{% for palette in palettes %}
+  {% if palette.default %}:where(:root),{% endif %}
+  .{{ variant_name }}-{{ palette.name }} {
+    {% for (key, value) in palette. %}
+      {{ key }}: {{ value }};
+    {% endfor %}
+  }
+{% endfor %}

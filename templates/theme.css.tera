@@ -1,9 +1,0 @@
-{{ selector }} {
-  {% for space in color_spaces %}
-    {{ space.selector }} {
-      {% for token in space.tokens %}
-        {{ token }}
-      {% endfor %}
-    }
-  {% endfor %}
-}
