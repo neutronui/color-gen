@@ -1,68 +1,3 @@
-// use std::collections::HashMap;
-// use std::fs;
-// use std::path::{Path, PathBuf};
-
-// use clap::Parser;
-// use itertools::Itertools;
-// use lazy_static::lazy_static;
-// use serde::{Deserialize, Serialize};
-// use bigcolor::{BigColor, color_space::{OKLCH}};
-// use serde_json::from_str;
-// use tera::Tera;
-
-// use crate::config::{Cli, PaletteConfig};
-// use crate::app::{StateBehavior};
-
-// mod config;
-// mod app;
-// mod css;
-
-// lazy_static! {
-//   pub static ref TEMPLATES: Tera = {
-//     let mut tera = match Tera::new("templates/*.tera") {
-//       Ok(t) => t,
-//       Err(e) =>  {
-//         println!("Parsing error(s): {}", e);
-//         std::process::exit(1);
-//       }
-//     };
-
-//     tera.add_raw_template("COLOR_TOKEN", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-{{ tone }}").unwrap();
-//     tera.add_raw_template("COLOR_BASE", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}").unwrap();
-//     tera.add_raw_template("COLOR_KEY", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-key").unwrap();
-
-//     tera
-//   };
-// }
-
-// // fn generate_variant_css(variant: &str) -> Result<(), Box<dyn std::error::Error>> {
-
-// // }
-
-// // fn generate_theme_css(theme: &config::ThemeConfig) -> Result<(), Box<dyn std::error::Error>> {
-
-// // }
-
-// fn main() -> Result<(), Box<dyn std::error::Error>> {
-//   let cli = Cli::parse();
-//   let mut app_state = app::AppState::Uninitialized;
-
-//   app_state = app_state.load_config(&cli)?;
-//   app_state = app_state.validate()?;
-//   app_state = app_state.generate_css()?;
-
-//   if let app::AppState::Generated(_, css_files) = app_state {
-//     println!("Generated CSS files:");
-//     for file in css_files {
-//       println!("- {}", file.display());
-//     }
-//   }
-
-
-//   Ok(())
-// }
-
-
 use std::{collections::HashMap, fs, path::{Path, PathBuf}};
 use clap::Parser;
 use lazy_static::lazy_static;
@@ -78,7 +13,7 @@ lazy_static! {
         println!("Parsing error(s): {}", e);
         std::process::exit(1);
       }
-    };
+    }; 
     
     tera
   };
