@@ -7,9 +7,14 @@
       "description": "test theme",
       "prefix": null,
       "palettes": {
-        "blue": { "base": "#3500FF", "variant": "brand" },
-        "gray": { "base": "#1C1C20", "variant": "neutral" },
-        "red": { "base": "#FF3B30", "variant": "danger" }
+        "blue": "#3500FF",
+        "gray": "#1C1C20",
+        "red": "#FF3B30"
+      },
+      "variants": {
+        "brand": "blue",
+        "neutral": "gray",
+        "danger": "red"
       }
     }
   ]

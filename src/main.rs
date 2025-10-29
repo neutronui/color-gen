@@ -1,7 +1,8 @@
-use std::{collections::HashMap, fs, path::{Path, PathBuf}};
+use std::{collections::{BTreeMap, HashMap}, fs, path::{Path, PathBuf}};
+use bigcolor::BigColor;
 use clap::Parser;
 use lazy_static::lazy_static;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use tera::Tera;
 
@@ -13,7 +14,11 @@ lazy_static! {
         println!("Parsing error(s): {}", e);
         std::process::exit(1);
       }
-    }; 
+    };
+
+    tera.add_raw_template("COLOR_TOKEN", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-{{ tone }}").unwrap();
+    tera.add_raw_template("COLOR_BASE", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}").unwrap();
+    tera.add_raw_template("COLOR_KEY", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-key").unwrap();
     
     tera
   };
@@ -43,58 +48,76 @@ pub struct ThemeConfig {
   pub default: Option<bool>,
   pub description: Option<String>,
   pub prefix: Option<String>,
-  pub palettes: HashMap<String, PaletteConfig>
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PaletteConfig {
-  pub base: String,
-  pub variant: String
+  pub palettes: HashMap<String, String>,
+  pub variants: HashMap<String, String>
 }
 
 #[derive(Debug)]
 pub struct Theme {
   pub name: String,
   pub default: bool,
-  pub palettes: Vec<Palette>
+  pub palettes: Vec<Palette>,
+  pub variants: Vec<Variant>
 }
 
 #[derive(Debug)]
 pub struct Palette {
   pub name: String,
-  pub variant: String,
-  pub tones: Vec<u8>,
-  pub is_variant_default: bool
+  pub colors: BTreeMap<u8, BigColor>,
+  pub base_color: BigColor,
+  pub key_tone: u8
+}
+
+#[derive(Debug)]
+pub struct Variant {
+  pub name: String,
+  pub palette: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CssTheme {
+  default: bool,
+  name: String,
+  palettes: Vec<CssPalette>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CssPalette {
+  name: String,
+  colors: BTreeMap<String, String>,
+  base_color: (String, String),
+  key_tone: u8
 }
 
 pub enum CssGenState {
   Raw(RawConfig),
   Validated(ValidatedConfig),
-  Palettes(GeneratedPalettes),
-  PaletteCss(PaletteCssReady),
-  VariantCss(VariantCssReady),
+  Colors(GeneratedColors),
+  Tokens(GeneratedTokens),
+  Css(CssReady),
 }
 
 pub struct RawConfig(pub Config);
 pub struct ValidatedConfig(pub Config);
-pub struct GeneratedPalettes(pub Vec<Theme>);
-pub struct PaletteCssReady(pub Vec<Theme>);
-pub struct VariantCssReady();
+pub struct GeneratedColors(pub Vec<Theme>);
+pub struct GeneratedTokens(pub Vec<CssTheme>);
+pub struct CssReady(pub Vec<Theme>);
 
 pub trait Validate {
   fn validate(self) -> ValidatedConfig;
 }
 
-pub trait GeneratePalettes {
-  fn generate_palettes(self) -> GeneratedPalettes;
+pub trait GenerateColors {
+  fn generate_colors(&self) -> GeneratedColors;
+  fn get_closest_to_base(&self, base_color: &BigColor, scale: &Vec<BigColor>) -> Result<BigColor, Box<dyn std::error::Error>>;
 }
 
-pub trait EmitPaletteCss {
-  fn emit_palette_css(self, out_dir: &str) -> PaletteCssReady;
+pub trait GenerateTokens {
+  fn generate_tokens(self) -> GeneratedTokens;
 }
 
-pub trait EmitVariantCss {
-  fn emit_variant_css(self, out_dir: &str) -> VariantCssReady;
+pub trait EmitCss {
+  fn emit_css(self, out_dir: &str) -> CssReady;
 }
 
 impl Validate for RawConfig {
@@ -103,108 +126,128 @@ impl Validate for RawConfig {
   }
 }
 
-impl GeneratePalettes for ValidatedConfig {
-  fn generate_palettes(self) -> GeneratedPalettes {
+impl GenerateColors for ValidatedConfig {
+  fn generate_colors(&self) -> GeneratedColors {
     let mut themes = Vec::new();
+    let tones = vec![05, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95];
 
-    for theme_cfg in self.0.themes {
+    for theme_cfg in &self.0.themes {
       let mut palettes = Vec::new();
+      let mut variants = Vec::new();
 
-      for (name, palette_cfg) in theme_cfg.palettes {
-        let tones = vec![05, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95];
-        let palette = Palette {
+      for (name, base_color_raw) in &theme_cfg.palettes {
+        let base_color = BigColor::new(base_color_raw);
+        let scale = base_color.monochromatic(Some(tones.len()));
+        let key_color = self.get_closest_to_base(&base_color, &scale).unwrap();
+        let colors: BTreeMap<u8, BigColor> = tones
+          .iter()
+          .cloned()
+          .zip(scale.into_iter())
+          .collect();
+
+        palettes.push(Palette {
           name: name.clone(),
-          variant: palette_cfg.variant,
-          tones,
-          is_variant_default: theme_cfg.default.unwrap_or(false)
-        };
+          colors: colors.clone(),
+          base_color: base_color.clone(),
+          key_tone: colors.iter().position(|c| c.1 == &key_color).unwrap() as u8,
+        });
+      }
 
-        palettes.push(palette);
+      for (name, palette_name) in &theme_cfg.variants {
+        variants.push(Variant {
+          name: name.clone(),
+          palette: palette_name.clone(),
+        });
       }
 
       themes.push(Theme {
-        name: theme_cfg.name,
+        name: theme_cfg.name.clone(),
         default: theme_cfg.default.unwrap_or(false),
-        palettes
+        palettes,
+        variants
       });
     }
 
-    GeneratedPalettes(themes)
+
+    GeneratedColors(themes)
+  }
+
+  fn get_closest_to_base(&self, base_color: &BigColor, scale: &Vec<BigColor>) -> Result<BigColor, Box<dyn std::error::Error>> {
+    let base_oklch = base_color.to_oklch();
+    let closest = scale
+      .iter()
+      .min_by(|a, b| {
+        (a.to_oklch().l - base_oklch.l)
+          .abs()
+          .partial_cmp(&(b.to_oklch().l - base_oklch.l).abs())
+          .unwrap()
+      })
+      .unwrap_or(scale.get(scale.len() / 2).unwrap());
+
+    Ok(closest.clone())
   }
 }
 
-impl EmitPaletteCss for GeneratedPalettes {
-  fn emit_palette_css(self, out_dir: &str) -> PaletteCssReady {
+impl GenerateTokens for GeneratedColors {
+  fn generate_tokens(self) -> GeneratedTokens {
+    let mut themes = Vec::new();
+    let tones = vec![05, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95];
+
     for theme in &self.0 {
-      let mut css = String::new();
-      css.push_str(&format!(".palette-{} {{\n", theme.name));
+      let mut css_palettes = Vec::new();
 
       for palette in &theme.palettes {
-        for tone in &palette.tones {
-          css.push_str(&format!(
-            "--color-{}-{:02}: #000000;\n",
-            palette.name, tone
-          ));
+        let mut colors_map: BTreeMap<String, String> = BTreeMap::new();
+
+        for (tone, color) in &palette.colors {
+          colors_map.insert(format!("{:02}", tone), color.to_oklch_string());
         }
+
+        let mut base_color_ctx = tera::Context::new();
+        base_color_ctx.insert("palette_name", &palette.name);
+
+        css_palettes.push(CssPalette {
+          name: palette.name.clone(),
+          colors: colors_map,
+          base_color: (
+            TEMPLATES.render("COLOR_BASE", &base_color_ctx).unwrap().to_string(),
+            palette.base_color.to_oklch_string()
+          ),
+          key_tone: palette.key_tone
+        });
       }
 
-      css.push_str("}\n");
-      std::fs::write(format!("{}/{}.css", out_dir, theme.name), css)
-        .expect("Failed to write css file");
+      themes.push(CssTheme {
+        name: theme.name.clone(),
+        default: theme.default,
+        palettes: css_palettes,
+      });
     }
 
-    PaletteCssReady(self.0)
+    GeneratedTokens(themes)
   }
 }
 
-impl EmitVariantCss for PaletteCssReady {
-  fn emit_variant_css(self, out_dir: &str) -> VariantCssReady {
-    let mut variants: HashMap<String, Vec<&Palette>> = HashMap::new();
-
+impl EmitCss for GeneratedTokens {
+  fn emit_css(self, out_dir: &str) -> CssReady {
+    let themes = Vec::new();
     for theme in &self.0 {
-      for palette in &theme.palettes {
-        variants.entry(palette.variant.clone())
-          .or_default()
-          .push(palette);
-      }
+      let mut context = tera::Context::new();
+      context.insert("name", &theme.name);
+      context.insert("default", &theme.default);
+      context.insert("palettes", &theme.palettes);
+
+      let rendered = TEMPLATES
+        .render("palette.css.tera", &context)
+        .expect("Failed to render template");
+
+      let theme_out_dir = Path::new(out_dir).join(&theme.name);
+      fs::create_dir_all(&theme_out_dir).expect("Failed to create theme output directory");
+      let out_path = theme_out_dir.join("palette.css");
+      fs::write(&out_path, rendered).expect("Failed to write CSS file");
     }
 
-    
-    for (variant, palettes) in &variants {
-      let mut css = String::new();
-      for palette in palettes {
-        let selector = if palette.is_variant_default {
-          format!(":where(:root),\n .{}-{} {{\n", variant, palette.name)
-        } else {
-          format!(".{}-{} {{\n", variant, palette.name)
-        };
-
-        css.push_str(&selector);
-        
-        for tone in &palette.tones {
-          css.push_str(&format!(
-            "--color-{}-{:02}: var(--color-{}-{:02});\n",
-            variant, tone, palette.name, tone
-          ));
-        }
-
-        css.push_str(&format!(
-          "--color-{}: var(--color-{});\n",
-          variant, palette.name
-        ));
-        css.push_str(&format!(
-          "--color-{}-on: var(--color-{}-on);\n",
-          variant, palette.name
-        ));
-        css.push_str("}\n\n");
-      }
-
-      std::fs::write(format!("{}/{}.css", out_dir, variant), css)
-        .expect("Failed to write variant css file");
-    }
-
-
-    VariantCssReady()
+    CssReady(themes)
   }
 }
 
@@ -228,7 +271,7 @@ fn main() {
 
   
   let validated = raw.validate();
-  let palettes = validated.generate_palettes();
-  let palettes_ready = palettes.emit_palette_css(&out_dir.to_str().unwrap());
-  let _variants_ready = palettes_ready.emit_variant_css(&out_dir.to_str().unwrap());
+  let colors = validated.generate_colors();
+  let tokens = colors.generate_tokens();
+  let css_ready = tokens.emit_css(&out_dir.to_str().unwrap());
 }

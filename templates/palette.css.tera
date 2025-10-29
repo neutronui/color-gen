@@ -1,8 +1,10 @@
-{% if theme.default %}:where(:root),{% endif %}
-.palette-{{ theme_name }} {
-  {% for palette in palettes %}
-    {% for (key, value) in palette.tones %}
-      {{ key }}: {{ value }};
-    {% endfor %}
-  {% endfor %}
+{% if default %}:where(:root),{% endif -%}
+.palette-{{ name }} {
+{%- for palette in palettes %}
+  {% for key, value in palette.colors %}
+  {{- key }}: {{ value }};
+  {% endfor -%}
+  {{ palette.base_color.0 }}: {{ palette.base_color.1 }};
+  --{{ palette.name }}-key: {{ palette.key_tone }};
+{% endfor -%}
 }
