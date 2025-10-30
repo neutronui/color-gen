@@ -274,7 +274,7 @@
 //   let css_ready = tokens.emit_css(&out_dir.to_str().unwrap());
 // }
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bigcolor::BigColor;
 use serde::Deserialize;
@@ -373,14 +373,70 @@ fn generate_palette(config: &PaletteConfig) -> Palette {
 #[derive(Debug, Clone)]
 struct CssVarNode {
   name: String,
-  value: String,
-  depends_on: Vec<String>
+  value: String
 }
 
 fn build_dependency_graph(palette: &Palette) -> Vec<CssVarNode> {
   let mut nodes = Vec::new();
 
-  for (hue_name, hue)
+  for (hue_name, hue) in &palette.hues {
+    for shade in &hue.shades {
+      let var_name = format!("--{}-{:02}", hue_name, shade.tone);
+      nodes.push(CssVarNode {
+        name: var_name.clone(),
+        value: shade.clone().color.lighten(Some(5.0)).to_oklch_string()
+      });
+    }
+  }
+
+  for (variant_name, variant) in &palette.variants {
+    for tone in &[50u8] {
+      let ref_name = format!("--{}-{:02}", variant.hue_ref, tone);
+      let var_name = format!("--{}-{:02}", variant_name, tone);
+      nodes.push(CssVarNode {
+        name: var_name.clone(),
+        value: format!("var({})", ref_name),
+      });
+    }
+  }
+
+  nodes
 }
 
-fn main() {}
+fn generate_css(nodes: &[CssVarNode]) -> String {
+  let mut css = String::from(":root {\n");
+  for node in nodes {
+    css.push_str(&format!("  {}: {};\n", node.name, node.value));
+  }
+  css.push_str("}\n");
+  css
+}
+
+fn main() {
+    let json = r##"
+    {
+        "name": "test",
+        "default": false,
+        "description": "test theme",
+        "prefix": null,
+        "tones": [5,10,20,30,40,50,60,70,80,90,95],
+        "hues": {
+            "blue": "#3500FF",
+            "gray": "#1C1C20",
+            "red": "#FF3B30"
+        },
+        "variants": {
+            "brand": "blue",
+            "neutral": "gray",
+            "danger": "red"
+        }
+    }
+    "##;
+
+    let config: PaletteConfig = serde_json::from_str(json).unwrap();
+    let palette = generate_palette(&config);
+    let nodes = build_dependency_graph(&palette);
+    let css = generate_css(&nodes);
+
+    println!("{}", css);
+}
