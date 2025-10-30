@@ -1,6 +1,6 @@
 {
   "outDir": "./test",
-  "themes": [
+  "palettes": [
     {
       "name": "test",
       "default": false,

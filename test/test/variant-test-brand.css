@@ -1,0 +1,13 @@
+:root {
+  --blue-05: oklch(5% 0.3 271);
+  --blue-10: oklch(14% 0.3 271);
+  --blue-20: oklch(23% 0.3 271);
+  --blue-30: oklch(32% 0.3 271);
+  --blue-40: oklch(41% 0.3 271);
+  --blue-50: oklch(50% 0.3 271);
+  --blue-60: oklch(60.000004% 0.3 271);
+  --blue-70: oklch(69% 0.3 271);
+  --blue-80: oklch(78% 0.3 271);
+  --blue-90: oklch(87% 0.3 271);
+  --blue-95: oklch(96% 0.3 271);
+}
