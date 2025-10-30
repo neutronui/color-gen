@@ -1,0 +1,6 @@
+--{%- if prefix -%}
+  {{- prefix -}}
+{%- endif -%}
+color-
+{{- palette_name -}}-
+{{- tone -}}

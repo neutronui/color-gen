@@ -8,7 +8,7 @@ use tera::Tera;
 
 lazy_static! {
   static ref TEMPLATES: Tera = {
-    let mut tera = match Tera::new("templates/*.tera") {
+    let tera = match Tera::new("templates/*.tera") {
       Ok(t) => t,
       Err(e) => {
         println!("Parsing error(s): {}", e);
@@ -16,10 +16,6 @@ lazy_static! {
       }
     };
 
-    tera.add_raw_template("COLOR_TOKEN", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-{{ tone }}").unwrap();
-    tera.add_raw_template("COLOR_BASE", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}").unwrap();
-    tera.add_raw_template("COLOR_KEY", "--{% if prefix %}{{ prefix }}-{% endif %}color-{{ palette_name }}-key").unwrap();
-    
     tera
   };
 }
@@ -88,6 +84,8 @@ pub struct CssPalette {
   base_color: (String, String),
   key_tone: u8
 }
+
+pub struct CssValue {}
 
 pub enum CssGenState {
   Raw(RawConfig),
@@ -210,7 +208,7 @@ impl GenerateTokens for GeneratedColors {
           name: palette.name.clone(),
           colors: colors_map,
           base_color: (
-            TEMPLATES.render("COLOR_BASE", &base_color_ctx).unwrap().to_string(),
+            TEMPLATES.render("color_base.css.tera", &base_color_ctx).unwrap().to_string(),
             palette.base_color.to_oklch_string()
           ),
           key_tone: palette.key_tone
