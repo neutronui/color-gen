@@ -5,6 +5,6 @@
   {{- key }}: {{ value }};
   {% endfor -%}
   {{ palette.base_color.0 }}: {{ palette.base_color.1 }};
-  {{ palette.key_tone.0 }}: {{ palette.key_tone.1 }};
+  {# {{ palette.key_tone.0 }}: {{ palette.key_tone.1 }}; #}
 {% endfor -%}
 }
