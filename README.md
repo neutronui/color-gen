@@ -9,7 +9,7 @@ cargo install --git https://github.com/neutronui/color-gen.git
 
 ### Usage
 ```sh
-substrate color-gen --config path/to/config.json
+substrate --config path/to/config.json
 ```
 
 ### Configuration
