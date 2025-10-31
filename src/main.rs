@@ -229,9 +229,14 @@ fn main() {
 
         for shade in scale.shades.values() {
           let var_name = format!("color-{}-{:02}", variant, shade.tone).with_prefix(prefix);
-
           css_vars.push(format!("{}: var(--{});", format!("--{}", var_name), shade.name));
         }
+        let key_color_prop = format!("color-{}", scale.name).with_prefix(prefix);
+        let key_color_name = scale.shades.get(&scale.key_tone).unwrap().name.clone();
+        css_vars.push(format!("--{}: var(--{});", key_color_prop, key_color_name));
+        let key_on_prop = format!("color-{}-on", scale.name).with_prefix(prefix);
+        let key_on_name = format!("color-{}-on", scale.name).with_prefix(prefix);
+        css_vars.push(format!("--{}: var(--{});", key_on_prop, key_on_name));
 
         variants.push(CssVariant {
           selector,
@@ -255,6 +260,7 @@ fn main() {
           format!(".{}-palette", &palette_cfg.name.with_prefix(prefix))
         };
     let mut css_vars = Vec::<String>::new();
+    
     for scale in &scales {
       for shade in scale.shades.values() {
         css_vars.push(format!("--{}: {};", shade.name, shade.color.to_oklch_string()));
