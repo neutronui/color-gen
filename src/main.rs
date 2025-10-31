@@ -22,6 +22,8 @@ lazy_static! {
 }
 
 #[derive(Debug, Parser)]
+#[command(name = "substrate-color-gen")]
+#[command(bin_name = "substrate")]
 #[command(about, version)]
 struct Cli {
   #[arg(short, long, value_name = "FILE_PATH")]

@@ -2,9 +2,16 @@
 name = "substrate-color-gen"
 version = "0.0.1"
 edition = "2024"
+authors = ["Nathan Brown <me@nathanbrown.dev>"]
+license = "MIT"
+description = "Color palette generator tool for substrate"
+readme = "README.md"
+homepage = "https://github.com/neutronui/color-gen"
+repository = "https://github.com/neutronui/color-gen"
+keywords = ["cli", "css", "colors", "palette", "generator", "substrate", "neutron-ui", "neutron ui"]
+categories = ["command-line-utilities"]
 
 [dependencies]
-anyhow = "1.0.100"
 bigcolor = "1.2.1"
 clap = { version = "4.5.49", features = ["derive"] }
 itertools = "0.14.0"
