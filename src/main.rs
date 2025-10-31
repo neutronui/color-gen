@@ -1,4 +1,5 @@
 use std::{collections::{BTreeMap, HashMap}, fs, path::{Path, PathBuf}};
+use indexmap::IndexMap;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
@@ -55,6 +56,27 @@ lazy_static! {
 struct Cli {
   #[arg(short, long, value_name = "FILE_PATH")]
   pub config: PathBuf,
+
+  /// Optional path to an input JSON file containing a token set to resolve.
+  /// If provided, the tool will resolve tokens and emit CSS/JSON outputs.
+  #[arg(long, value_name = "TOKENS_JSON")] 
+  pub tokens: Option<PathBuf>,
+
+  /// Output directory for resolved token outputs (CSS and JSON). Used only when --tokens is provided.
+  #[arg(long, value_name = "OUT_DIR")] 
+  pub tokens_out_dir: Option<PathBuf>,
+
+  /// Optional CSS selector used in the generated stylesheet (default :root).
+  #[arg(long, default_value = ":root")]
+  pub tokens_selector: String,
+
+  /// Optional prefix for CSS custom properties when generating the stylesheet.
+  #[arg(long, default_value = "")]
+  pub tokens_prefix: String,
+
+  /// Load one or more JS plugin files providing custom transforms (requires --features js).
+  #[arg(long = "tokens-plugin", value_name = "JS_FILE", num_args(0..))]
+  pub tokens_plugins: Vec<PathBuf>,
 
   #[arg(short, long, action = clap::ArgAction::Count)]
   debug: u8,
@@ -153,6 +175,54 @@ impl StringExtensions for String {
 
 fn main() {
   let cli = Cli::parse();
+  // If token I/O is requested, run that path and return early
+  if let Some(tokens_path) = &cli.tokens {
+    let tokens_json = fs::read_to_string(tokens_path).expect("Failed to read tokens JSON");
+    let raw_map: IndexMap<String, design_token::Token> = serde_json::from_str(&tokens_json)
+      .expect("Failed to parse tokens JSON into TokenSet (map)");
+    let mut token_set: design_token::TokenSet = IndexMap::new();
+    for (k, t) in raw_map {
+      token_set.insert(k, t);
+    }
+
+    // Build registry and optionally load JS plugins
+  #[allow(unused_mut)]
+  let mut registry = design_token::TransformRegistry::default();
+    #[cfg(feature = "js")]
+    {
+      for p in &cli.tokens_plugins {
+        let src = fs::read_to_string(p).expect("Failed to read JS plugin file");
+        // Use file stem as a default transform group name prefix; allow multiple functions inside.
+        // We register the whole file content to be evaluated together later.
+        registry.add_js_transform(
+          p.file_stem().and_then(|s| s.to_str()).unwrap_or("plugin"),
+          &src,
+        );
+      }
+    }
+
+    let resolved = design_token::resolve_tokens_with_registry(&token_set, &registry)
+      .expect("Failed to resolve tokens");
+    let out_dir = cli.tokens_out_dir.clone().unwrap_or_else(|| PathBuf::from("out"));
+    fs::create_dir_all(&out_dir).expect("Failed to create tokens output directory");
+
+    // Write CSS
+    let css = design_token::to_css_stylesheet(&resolved, &cli.tokens_selector, 
+      if cli.tokens_prefix.is_empty() { None } else { Some(cli.tokens_prefix.as_str()) }
+    );
+    let css_path = out_dir.join("tokens.css");
+    fs::write(&css_path, css).expect("Failed to write tokens.css");
+
+    // Write resolved JSON (string values for convenience)
+    let resolved_map = design_token::to_resolved_string_map(&resolved);
+    let json_path = out_dir.join("tokens.resolved.json");
+    fs::write(&json_path, serde_json::to_string_pretty(&resolved_map).unwrap())
+      .expect("Failed to write tokens.resolved.json");
+
+    println!("Resolved tokens written to {:?} and {:?}", css_path, json_path);
+    return;
+  }
+
   let data = fs::read_to_string(&cli.config)
     .expect("Failed to read config file");
   let config: Config = from_str(&data)

@@ -25,3 +25,11 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 tera = "1.20.0"
 thiserror = "2.0.17"
+
+[features]
+# Enable JavaScript-based custom transforms (engine to be added in future changes)
+js = ["dep:boa_engine"]
+
+[dependencies.boa_engine]
+version = "0.17"
+optional = true

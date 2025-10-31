@@ -1,0 +1,35 @@
+{
+  "color.brand.50": {
+    "name": "color.brand.50",
+    "value": "#3500ff",
+    "comment": "Brand primary color"
+  },
+  "color.brand.50.text": {
+    "name": "color.brand.50.text",
+    "value": "#ffffff",
+    "comment": "On-color for brand 50"
+  },
+  "spacing.base": {
+    "name": "spacing.base",
+    "value": "4px",
+    "comment": "Base spacing"
+  },
+  "spacing.large": {
+    "name": "spacing.large",
+    "value": "calc(var(--spacing-base) * 4)",
+    "comment": "Large spacing derived via calc"
+  },
+  "radius.sm": {
+    "name": "radius.sm",
+    "value": "2px"
+  },
+  "font.size.base": {
+    "name": "font.size.base",
+    "value": "16px"
+  },
+  "font.size.lg": {
+    "name": "font.size.lg",
+    "value": "calc(var(--font-size-base) * 1.125)",
+    "comment": "Slightly larger font using calc"
+  }
+}
