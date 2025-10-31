@@ -41,6 +41,7 @@ pub enum TokenValue {
   Object(IndexMap<String, TokenValue>),
   Alias(String),
   Reference(String),
+  Transform(TransformExpr),
   Null
 }
 
@@ -59,6 +60,17 @@ pub struct Token {
 
 pub type TokenSet = IndexMap<String, Token>;
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TransformStep {
+  pub r#type: String,
+  pub args: Vec<TokenValue>
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TransformExpr {
+  pub steps: Vec<TransformStep>
+}
+
 #[derive(Debug, Error)]
 pub enum ResolveError {
   #[error("alias cycle detected at token: '{0}'")]
@@ -66,7 +78,11 @@ pub enum ResolveError {
   #[error("token not found: '{0}'")]
   TokenNotFound(String),
   #[error("type mismatch resolving token: '{0}'")]
-  TypeMismatch(String)
+  TypeMismatch(String),
+  #[error("invalid transform function: '{0}'")]
+  InvalidTransform(String),
+  #[error("failed to apply transform: '{0}'")]
+  TransformFailed(String),
 }
 
 pub fn resolve_tokens(tokens: &TokenSet) -> Result<TokenSet, ResolveError> {
@@ -81,6 +97,7 @@ pub fn resolve_tokens(tokens: &TokenSet) -> Result<TokenSet, ResolveError> {
     stack: &mut Vec<String>
   ) -> Result<TokenValue, ResolveError> {
     match val {
+      TokenValue::Transform(expr) => apply_transform_pipeline(name, expr, tokens, resolved, stack),
       TokenValue::Reference(target_path) => {
         if !tokens.contains_key(target_path) {
           return Err(ResolveError::TokenNotFound(format!("{} (referenced by {})", target_path, name)));
@@ -174,6 +191,79 @@ pub fn resolve_tokens(tokens: &TokenSet) -> Result<TokenSet, ResolveError> {
   }
 
   Ok(resolved)
+}
+
+fn apply_transform_pipeline(
+  name: &str,
+  expr: &TransformExpr,
+  tokens: &TokenSet,
+  resolved: &mut TokenSet,
+  stack: &mut Vec<String>
+) -> Result<TokenValue, ResolveError> {
+  let mut current: Option<TokenValue> = None;
+
+  for step in &expr.steps {
+    current = Some(apply_transform_step(
+      name,
+      step,
+      current.clone(),
+      tokens,
+      resolved,
+      stack
+    )?);
+  }
+
+  Ok(current.unwrap_or(TokenValue::Null))
+}
+
+fn resolve_alias(
+  name: &str,
+  target: &str,
+  tokens: &TokenSet,
+  resolved: &mut TokenSet,
+  stack: &mut Vec<String>
+) -> Result<TokenValue, ResolveError> {
+  todo!()
+}
+
+fn apply_transform_step(
+  name: &str,
+  step: &TransformStep,
+  input: Option<TokenValue>,
+  tokens: &TokenSet,
+  resolved: &mut TokenSet,
+  stack: &mut Vec<String>
+) -> Result<TokenValue, ResolveError> {
+  match step.r#type.as_str() {
+    "alias" => {
+      let target = step
+        .args
+        .get(0)
+        .and_then(|v| match v {
+          TokenValue::String(s) => Some(s.clone()),
+          _ => None,
+        })
+        .ok_or_else(|| ResolveError::InvalidTransform("alias requires string arg".into()))?;
+
+      resolve_alias(name, &target, tokens, resolved, stack)
+    }
+
+    "multiply" => {
+      let factor = match step.args.get(0) {
+        Some(TokenValue::Number(n)) => *n,
+        _ => return Err(ResolveError::InvalidTransform("multiply expects number".into()))
+      };
+
+      match input {
+        Some(TokenValue::Number(n)) => Ok(TokenValue::Number(n * factor)),
+        _ => Err(ResolveError::TransformFailed("multiply expects number input".into()))
+      }
+    }
+
+    "lighten" => todo!(),
+
+    other => Err(ResolveError::InvalidTransform(format!("unknown transform: {}", other))),
+  }
 }
 
 pub fn to_css_custom_properties(tokens: &TokenSet) -> IndexMap<String, String> {
