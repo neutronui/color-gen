@@ -291,5 +291,8 @@ fn main() {
     println!("Generated palette file: {:?}", out_path);
     let rendered = TEMPLATES.render("palette.css.tera", &ctx).unwrap();
     fs::write(&out_path, rendered).expect("Failed to write output file");
+
+    println!("================================================");
+    design_token::example().expect("Design token example failed");
   }
 }

@@ -132,14 +132,72 @@ pub fn resolve_tokens(tokens: &TokenSet) -> Result<TokenSet, ResolveError> {
   Ok(resolved)
 }
 
-pub fn to_css_custom_properties() {
-  todo!();
+pub fn to_css_custom_properties(tokens: &TokenSet) -> IndexMap<String, String> {
+  let mut map = IndexMap::new();
+  for (key, token) in tokens.iter() {
+    let css_name = format!("--{}", key.replace('.', "-"));
+    let css_value = token_value_to_string(&token.value);
+
+    map.insert(css_name, css_value);
+  }
+
+  map
 }
 
-fn token_value_to_string() {
-  todo!();
+fn token_value_to_string(value: &TokenValue) -> String {
+  match value {
+    TokenValue::String(s) => s.clone(),
+    TokenValue::Number(n) => {
+      if (n.fract()).abs() < std::f64::EPSILON {
+        format!("{:.0}", n)
+      } else {
+        n.to_string()
+      }
+    },
+    TokenValue::Bool(b) => b.to_string(),
+    TokenValue::Object(obj) => {
+      serde_json::to_string(obj).unwrap_or_else(|_| String::from("{}"))
+    },
+    TokenValue::Alias(a) => format!("alias({})", a),
+    TokenValue::Null => String::from("null")
+  }
 }
 
-pub fn merge_token_sets() {
-  todo!();
+pub fn merge_token_sets(base: &TokenSet, overrides: &TokenSet) -> TokenSet {
+  let mut out = base.clone();
+  for (k, v) in overrides.iter() {
+    out.insert(k.clone(), v.clone());
+  }
+  out
+}
+
+pub fn example() -> Result<(), ResolveError> {
+  let mut tokens: TokenSet = IndexMap::new();
+
+  tokens.insert(
+    "color.blue.50".to_string(),
+    Token {
+      name: "color.blue.50".to_string(),
+      value: TokenValue::String("#3500ff".to_string()),
+      comment: Some("A bright blue color".to_string())
+    },
+  );
+
+  tokens.insert(
+    "color.brand.50".to_string(),
+    Token {
+      name: "color.brand.50".to_string(),
+      value: TokenValue::Alias("color.blue.50".to_string()),
+      comment: Some("Brand color aliasing blue".to_string())
+    },
+  );
+
+  let resolved = resolve_tokens(&tokens)?;
+  let css_map = to_css_custom_properties(&resolved);
+
+  for (name, value) in css_map.iter() {
+    println!("{}: {};", name, value);
+  }
+
+  Ok(())
 }

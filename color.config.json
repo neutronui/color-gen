@@ -1,5 +1,5 @@
 {
-  "outDir": "./test",
+  "outDir": "./tmp",
   "palettes": [
     {
       "name": "test",
