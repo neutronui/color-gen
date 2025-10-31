@@ -1,6 +1,6 @@
 [package]
 name = "substrate-color-gen"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2024"
 authors = ["Nathan Brown <me@nathanbrown.dev>"]
 license = "MIT"
@@ -10,6 +10,10 @@ homepage = "https://github.com/neutronui/color-gen"
 repository = "https://github.com/neutronui/color-gen"
 keywords = ["cli", "css", "colors", "palette", "generator", "substrate", "neutron-ui", "neutron ui"]
 categories = ["command-line-utilities"]
+
+[[bin]]
+name = "substrate"
+path = "src/main.rs"
 
 [dependencies]
 bigcolor = "1.2.1"

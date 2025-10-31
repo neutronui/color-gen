@@ -7,15 +7,40 @@ use bigcolor::BigColor;
 use serde_json::from_str;
 use tera::Tera;
 
+const VARIANT_TEMPLATE: &str = r#"
+{% for variant in variants -%}
+{{ variant.selector }} {
+  {%- for variable in variant.variables %}
+  {{ variable }}
+  {%- endfor %}
+}
+{% endfor %}
+"#;
+
+const PALETTE_TEMPLATE: &str = r#"
+/*
+  {{ name }} Palette
+  {{ description }}
+*/
+
+{% for variant_file in variant_file_names -%}
+@import("./{{ variant_file }}");
+{% endfor -%}
+{{ selector }} {
+  {%- for variable in variables %}
+  {{ variable }}
+  {%- endfor %}
+}
+"#;
+
 lazy_static! {
   pub static ref TEMPLATES: Tera = {
-    let tera = match Tera::new("templates/*.tera") {
-      Ok(t) => t,
-      Err(e) => {
-        println!("Parsing error(s): {}", e);
-        std::process::exit(1);
-      }
-    };
+    let mut tera = Tera::default();
+
+    tera.add_raw_templates(vec![
+      ("palette.css.tera", PALETTE_TEMPLATE),
+      ("variant.css.tera", VARIANT_TEMPLATE)
+    ]).expect("Could not add templates");
 
     tera
   };
