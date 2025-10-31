@@ -7,6 +7,8 @@ use bigcolor::BigColor;
 use serde_json::from_str;
 use tera::Tera;
 
+mod design_token;
+
 const VARIANT_TEMPLATE: &str = r#"
 {% for variant in variants -%}
 {{ variant.selector }} {
