@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, HashMap, HashSet}, fs, path::{Path, PathBuf}};
+use std::{collections::{BTreeMap, HashMap}, fs, path::{Path, PathBuf}};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
@@ -25,7 +25,7 @@ lazy_static! {
 #[command(about, version)]
 struct Cli {
   #[arg(short, long, value_name = "FILE_PATH")]
-  pub config: String,
+  pub config: PathBuf,
 
   #[arg(short, long, action = clap::ArgAction::Count)]
   debug: u8,
@@ -64,22 +64,6 @@ struct Shade {
   name: String
 }
 
-#[derive(Debug, Clone)]
-struct Variant {
-  name: String,
-  default_hue: String,
-  scales: BTreeMap<String, Scale>
-}
-
-#[derive(Debug, Clone)]
-struct Palette {
-  name: String,
-  description: Option<String>,
-  prefix: Option<String>,
-  scales: HashMap<String, Scale>,
-  variants: HashMap<String, Variant>
-}
-
 #[derive(Debug, Serialize)]
 struct CssVariant {
   selector: String,
@@ -89,6 +73,13 @@ struct CssVariant {
 #[derive(Debug, Serialize)]
 struct CssVariantCtx {
   variants: Vec<CssVariant>
+}
+
+#[derive(Debug, Serialize)]
+struct CssPaletteCtx {
+  variant_file_names: Vec<String>,
+  selector: String,
+  variables: Vec<String>
 }
 
 fn normalize_out_dir(config_dir: &Path, out: &str) -> PathBuf {
@@ -115,13 +106,28 @@ fn closest_to_base(base_color: &BigColor, shades: &BTreeMap<u8, Shade>) -> u8 {
   closest.clone().tone
 }
 
+trait StringExtensions {
+  fn with_prefix(&self, prefix: &str) -> String;
+}
+
+impl StringExtensions for String {
+  fn with_prefix(&self, prefix: &str) -> String {
+    if prefix.is_empty() {
+      self.clone()
+    } else {
+      format!("{}-{}", prefix, self)
+    }
+  }
+}
+
 fn main() {
   let cli = Cli::parse();
   let data = fs::read_to_string(&cli.config)
     .expect("Failed to read config file");
   let config: Config = from_str(&data)
     .expect("Failed to parse config JSON");
-  let out_dir = normalize_out_dir(Path::new(&cli.config).parent().unwrap(), &config.out_dir);
+  let out_dir = normalize_out_dir(&cli.config.parent().unwrap_or(Path::new(".")), &config.out_dir);
+  fs::create_dir_all(&out_dir).expect("Failed to create output directory");
   
   println!("Output directory: {:?}", out_dir);
 
@@ -131,8 +137,11 @@ fn main() {
     let is_default = palette_cfg.default.unwrap_or_default();
     let prefix = palette_cfg.prefix.as_deref().unwrap_or_default();
     let tones = &palette_cfg.tones;
+    let palette_out_dir = out_dir.join(name);
+    fs::create_dir_all(&palette_out_dir).expect("Failed to create palette output directory");
     
     let mut scales = Vec::<Scale>::new();
+    let default_selector = ":where(:root)";
     
     for (hue_name, base_color_raw) in &palette_cfg.hues {
       let mut shades = BTreeMap::<u8, Shade>::new();
@@ -144,7 +153,7 @@ fn main() {
           tone: tones[idx],
           // TODO: Expose adjustments via config or CLI
           color: color.clone().lighten(Some(5.0)).clone(),
-          name: format!("color-{}-{:02}", hue_name, tones[idx])
+          name: format!("color-{}-{:02}", hue_name, tones[idx]).with_prefix(prefix)
         });
       }
 
@@ -157,30 +166,42 @@ fn main() {
       });
     }
 
+    let mut variant_file_names = Vec::<String>::new();
+
     for (variant, hue) in &palette_cfg.variants {
       let variant_file_name = format!("{}.css", variant);
-      let out_path = out_dir.join(&variant_file_name);
-      let default_selector = ":where(:root)";
+      let out_path = palette_out_dir.join(&variant_file_name);
+      variant_file_names.push(variant_file_name.clone());
 
       let mut variants = Vec::<CssVariant>::new();
       
-      for scale in &scales {
+      let mut ordered_scales: Vec<&Scale> = Vec::with_capacity(scales.len());
+      if let Some(pos) = scales.iter().position(|s| s.name == *hue) {
+        ordered_scales.push(&scales[pos]);
+        for (i, s) in scales.iter().enumerate() {
+          if i != pos {
+            ordered_scales.push(s);
+          }
+        }
+      } else {
+        for s in &scales {
+          ordered_scales.push(s);
+        }
+      }
+
+      for scale in ordered_scales {
         let selector = if scale.name == *hue {
-          format!("{}, .{}-{}", default_selector, variant, scale.name)
+          format!("{}, .{}-{}", default_selector, variant.with_prefix(prefix), scale.name)
         } else {
-          format!(".{}-{}", variant, scale.name)
+          format!(".{}-{}", variant.with_prefix(prefix), scale.name)
         };
 
         let mut css_vars = Vec::<String>::new();
 
         for shade in scale.shades.values() {
-          let var_name = if prefix.is_empty() {
-            format!("--color-{}-{}", variant, shade.tone)
-          } else {
-            format!("--{}-color-{}-{}", prefix, variant, shade.tone)
-          };
+          let var_name = format!("color-{}-{:02}", variant, shade.tone).with_prefix(prefix);
 
-          css_vars.push(format!("{}: var(--{});", var_name, shade.name));
+          css_vars.push(format!("{}: var(--{});", format!("--{}", var_name), shade.name));
         }
 
         variants.push(CssVariant {
@@ -193,10 +214,43 @@ fn main() {
         variants
       }).unwrap();
       
-      let rendered = TEMPLATES.render("variant.css.tera", &ctx).unwrap();
-      fs::create_dir_all(&out_path).expect("Failed to create output directory");
-      fs::write(&out_path, rendered).expect("Failed to write output file");
       println!("Generated variant file: {:?}", out_path);
+      let rendered = TEMPLATES.render("variant.css.tera", &ctx).unwrap();
+      fs::write(&out_path, rendered).expect("Failed to write output file");
     }
+
+    let palette_file_name = format!("{}.css", &palette_cfg.name);
+    let selector = if is_default {
+          format!("{}, .{}-palette", default_selector, &palette_cfg.name.with_prefix(prefix))
+        } else {
+          format!(".{}-palette", &palette_cfg.name.with_prefix(prefix))
+        };
+    let mut css_vars = Vec::<String>::new();
+    for scale in &scales {
+      for shade in scale.shades.values() {
+        css_vars.push(format!("--{}: {};", shade.name, shade.color.to_oklch_string()));
+      }
+
+      let key_color_prop = format!("color-{}", scale.name).with_prefix(prefix);
+      let key_color_name = scale.shades.get(&scale.key_tone).unwrap().name.clone();
+      let key_prop = format!("{}-key", scale.name).with_prefix(prefix);
+
+      css_vars.push(format!("--{}: var(--{});", key_color_prop, key_color_name));
+      css_vars.push(format!("--{}: {};", key_prop, scale.key_tone));
+      if !std::ptr::eq(scale, scales.last().unwrap()) {
+        css_vars.push(String::new());
+      }
+    }
+
+    let ctx = tera::Context::from_serialize(CssPaletteCtx {
+      variant_file_names,
+      selector,
+      variables: css_vars
+    }).unwrap();
+
+    let out_path = palette_out_dir.join(&palette_file_name);
+    println!("Generated palette file: {:?}", out_path);
+    let rendered = TEMPLATES.render("palette.css.tera", &ctx).unwrap();
+    fs::write(&out_path, rendered).expect("Failed to write output file");
   }
 }

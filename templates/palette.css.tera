@@ -1,10 +1,8 @@
-{% if default %}:where(:root),{% endif -%}
-.palette-{{ name }} {
-{%- for palette in palettes %}
-  {% for key, value in palette.colors %}
-  {{- key }}: {{ value }};
-  {% endfor -%}
-  {{ palette.base_color.0 }}: {{ palette.base_color.1 }};
-  {# {{ palette.key_tone.0 }}: {{ palette.key_tone.1 }}; #}
+{% for variant_file in variant_file_names -%}
+@import("./{{ variant_file }}");
 {% endfor -%}
+{{ selector }} {
+  {%- for variable in variables %}
+  {{ variable }}
+  {%- endfor %}
 }

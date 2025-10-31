@@ -17,6 +17,23 @@
         "neutral": "gray",
         "danger": "red"
       }
+    },
+    {
+      "name": "foo",
+      "default": false,
+      "description": "test theme",
+      "prefix": "f",
+      "tones": [5, 95],
+      "hues": {
+        "green": "#00ff00",
+        "gray": "#1C1C20",
+        "red": "#FF3B30"
+      },
+      "variants": {
+        "brand": "green",
+        "neutral": "gray",
+        "danger": "red"
+      }
     }
   ]
 }
