@@ -89,78 +89,6 @@ pub fn resolve_tokens(tokens: &TokenSet) -> Result<TokenSet, ResolveError> {
   let mut resolved: TokenSet = IndexMap::new();
   let mut stack: Vec<String> = Vec::new();
 
-  fn resolve_value(
-    name: &str,
-    val: &TokenValue,
-    tokens: &TokenSet,
-    resolved: &mut TokenSet,
-    stack: &mut Vec<String>
-  ) -> Result<TokenValue, ResolveError> {
-    match val {
-      TokenValue::Transform(expr) => apply_transform_pipeline(name, expr, tokens, resolved, stack),
-      TokenValue::Reference(target_path) => {
-        if !tokens.contains_key(target_path) {
-          return Err(ResolveError::TokenNotFound(format!("{} (referenced by {})", target_path, name)));
-        }
-
-        let css_var = format!("--{}", target_path.replace('.', "-"));
-        Ok(TokenValue::String(format!("var({})", css_var)))
-      }
-      TokenValue::Alias(target_path) => {
-        if stack.contains(&target_path.clone()) {
-          return Err(ResolveError::CycleDetected(target_path.clone()));
-        }
-
-        let target_token = tokens.get(target_path).ok_or_else(|| {
-          ResolveError::TokenNotFound(format!("{} (referenced by {})", target_path, name))
-        })?;
-
-        if let Some(resolved_token) = resolved.get(target_path) {
-          return Ok(resolved_token.value.clone());
-        }
-
-        stack.push(target_path.clone());
-        let resolved_value = resolve_value(
-          target_path,
-          &target_token.value,
-          tokens,
-          resolved,
-          stack
-        )?;
-        stack.pop();
-
-        let new_token = Token {
-          name: target_path.clone(),
-          value: resolved_value.clone(),
-          comment: resolved_token_comment(resolved, tokens, target_path)
-        };
-        resolved.insert(target_path.clone(), new_token);
-        Ok(resolved_value)
-      }
-      TokenValue::Object(map) => {
-        let mut new_map = IndexMap::new();
-        for (k, v) in map.iter() {
-          let rv = resolve_value(name, v, tokens, resolved, stack)?;
-          new_map.insert(k.clone(), rv);
-        }
-        Ok(TokenValue::Object(new_map))
-      }
-      other => Ok(other.clone()),
-    }
-  }
-
-  fn resolved_token_comment<'a>(
-    resolved: &'a TokenSet,
-    tokens: &'a TokenSet,
-    key: &str
-  ) -> Option<String> {
-    if let Some(t) = resolved.get(key) {
-      t.comment.clone()
-    } else {
-      tokens.get(key).and_then(|t| t.comment.clone())
-    }
-  }
-
   for (key, token) in tokens.iter() {
     if resolved.contains_key(key) {
       continue;
@@ -216,14 +144,84 @@ fn apply_transform_pipeline(
   Ok(current.unwrap_or(TokenValue::Null))
 }
 
-fn resolve_alias(
+fn resolve_value(
   name: &str,
-  target: &str,
+  val: &TokenValue,
   tokens: &TokenSet,
   resolved: &mut TokenSet,
   stack: &mut Vec<String>
 ) -> Result<TokenValue, ResolveError> {
-  todo!()
+  match val {
+    TokenValue::Transform(expr) => apply_transform_pipeline(name, expr, tokens, resolved, stack),
+    TokenValue::Reference(target_path) => {
+      if !tokens.contains_key(target_path) {
+        return Err(ResolveError::TokenNotFound(format!("{} (referenced by {})", target_path, name)));
+      }
+
+      let css_var = format!("--{}", target_path.replace('.', "-"));
+      Ok(TokenValue::String(format!("var({})", css_var)))
+    }
+    TokenValue::Alias(target_path) => resolve_alias(name, target_path, tokens, resolved, stack),
+    TokenValue::Object(map) => {
+      let mut new_map = IndexMap::new();
+      for (k, v) in map.iter() {
+        let rv = resolve_value(name, v, tokens, resolved, stack)?;
+        new_map.insert(k.clone(), rv);
+      }
+      Ok(TokenValue::Object(new_map))
+    }
+    other => Ok(other.clone()),
+  }
+}
+
+fn resolved_token_comment<'a>(
+  resolved: &'a TokenSet,
+  tokens: &'a TokenSet,
+  key: &str
+) -> Option<String> {
+  if let Some(t) = resolved.get(key) {
+    t.comment.clone()
+  } else {
+    tokens.get(key).and_then(|t| t.comment.clone())
+  }
+}
+
+fn resolve_alias(
+  name: &str,
+  target_path: &str,
+  tokens: &TokenSet,
+  resolved: &mut TokenSet,
+  stack: &mut Vec<String>
+) -> Result<TokenValue, ResolveError> {
+  if stack.contains(&target_path.to_string().clone()) {
+    return Err(ResolveError::CycleDetected(target_path.to_string().clone()));
+  }
+
+  let target_token = tokens.get(target_path).ok_or_else(|| {
+    ResolveError::TokenNotFound(format!("{} (referenced by {})", target_path, name))
+  })?;
+
+  if let Some(resolved_token) = resolved.get(target_path) {
+    return Ok(resolved_token.value.clone());
+  }
+
+  stack.push(target_path.to_string().clone());
+  let resolved_value = resolve_value(
+    target_path,
+    &target_token.value,
+    tokens,
+    resolved,
+    stack
+  )?;
+  stack.pop();
+
+  let new_token = Token {
+    name: target_path.to_string().clone(),
+    value: resolved_value.clone(),
+    comment: resolved_token_comment(resolved, tokens, target_path)
+  };
+  resolved.insert(target_path.to_string().clone(), new_token);
+  Ok(resolved_value)
 }
 
 fn apply_transform_step(
@@ -294,6 +292,7 @@ fn token_value_to_string(value: &TokenValue) -> String {
     },
     TokenValue::Alias(a) => format!("alias({})", a),
     TokenValue::Reference(r) => format!("reference({})", r),
+    TokenValue::Transform(_) => "unresolved-transform".to_string(),
     TokenValue::Null => String::from("null")
   }
 }
@@ -325,6 +324,35 @@ pub fn example() -> Result<(), ResolveError> {
       value: TokenValue::Reference("color.blue.50".to_string()),
       comment: Some("Brand color aliasing blue".to_string())
     },
+  );
+
+  tokens.insert(
+    "spacing.base".to_string(),
+    Token {
+      name: "spacing.base".to_string(),
+      value: TokenValue::Number(4.0),
+      comment: None
+    }
+  );
+
+  tokens.insert(
+    "spacing.large".to_string(),
+    Token {
+      name: "spacing.large".to_string(),
+      value: TokenValue::Transform(TransformExpr {
+        steps: vec![
+          TransformStep {
+            r#type: "alias".to_string(),
+            args: vec![TokenValue::String("spacing.base".to_string())]
+          },
+          TransformStep {
+            r#type: "multiply".to_string(),
+            args: vec![TokenValue::Number(4.0)]
+          }
+        ]
+      }),
+      comment: Some("Large spacing as 4x base".to_string())
+    }
   );
 
   let resolved = resolve_tokens(&tokens)?;
