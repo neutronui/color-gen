@@ -77,6 +77,8 @@ struct CssVariantCtx {
 
 #[derive(Debug, Serialize)]
 struct CssPaletteCtx {
+  name: String,
+  description: String,
   variant_file_names: Vec<String>,
   selector: String,
   variables: Vec<String>
@@ -243,6 +245,8 @@ fn main() {
     }
 
     let ctx = tera::Context::from_serialize(CssPaletteCtx {
+      name: name.clone(),
+      description: description.to_string(),
       variant_file_names,
       selector,
       variables: css_vars
