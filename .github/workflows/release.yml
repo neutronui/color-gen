@@ -60,6 +60,6 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*/substrate-color-gen*
+          files: dist/*/substrate*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
