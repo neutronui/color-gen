@@ -10,6 +10,7 @@ pub enum TokenValue {
   Bool(bool),
   Object(IndexMap<String, TokenValue>),
   Alias(String),
+  Reference(String),
   Null
 }
 
@@ -45,13 +46,21 @@ pub fn resolve_tokens(tokens: &TokenSet) -> Result<TokenSet, ResolveError> {
     stack: &mut Vec<String>
   ) -> Result<TokenValue, ResolveError> {
     match val {
+      TokenValue::Reference(target_path) => {
+        if !tokens.contains_key(target_path) {
+          return Err(ResolveError::TokenNotFound(format!("{} (referenced by {})", target_path, name)));
+        }
+
+        let css_var = format!("--{}", target_path.replace('.', "-"));
+        Ok(TokenValue::String(format!("var({})", css_var)))
+      }
       TokenValue::Alias(target_path) => {
         if stack.contains(&target_path.clone()) {
           return Err(ResolveError::CycleDetected(target_path.clone()));
         }
 
         let target_token = tokens.get(target_path).ok_or_else(|| {
-          ResolveError::TokenNotFound(format!("{} (referencedby {})", target_path, name))
+          ResolveError::TokenNotFound(format!("{} (referenced by {})", target_path, name))
         })?;
 
         if let Some(resolved_token) = resolved.get(target_path) {
@@ -159,6 +168,7 @@ fn token_value_to_string(value: &TokenValue) -> String {
       serde_json::to_string(obj).unwrap_or_else(|_| String::from("{}"))
     },
     TokenValue::Alias(a) => format!("alias({})", a),
+    TokenValue::Reference(r) => format!("reference({})", r),
     TokenValue::Null => String::from("null")
   }
 }
@@ -187,7 +197,7 @@ pub fn example() -> Result<(), ResolveError> {
     "color.brand.50".to_string(),
     Token {
       name: "color.brand.50".to_string(),
-      value: TokenValue::Alias("color.blue.50".to_string()),
+      value: TokenValue::Reference("color.blue.50".to_string()),
       comment: Some("Brand color aliasing blue".to_string())
     },
   );
