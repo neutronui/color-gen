@@ -2,6 +2,36 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Represents the value of a design token, which can be a string, number, boolean,
+/// object, alias, reference, or null.
+/// - String: A direct string value.
+/// - Number: A numeric value.
+/// - Bool: A boolean value.
+/// - Object: A nested object of token values.
+/// - Alias: A reference to another token by its path (used for aliasing).
+/// - Reference: A reference to another token by its path (used for CSS variable referencing).
+/// - Null: Represents a null value.
+/// 
+/// This enum is used to define the various types of values that a design token can hold.
+/// Aliases are used to create alternative names for existing tokens, while references are used
+/// to refer to the value of another token in CSS.
+/// For example, an alias might be used to define a "brand color" that points to a specific
+/// color token, while a reference would be used to generate a CSS variable that points to
+/// that color token's value.
+/// 
+/// Example:
+/// ```
+/// let alias_token = Token {
+///   name: "color.brand.50".to_string(),
+///   value: TokenValue::Alias("color.blue.50".to_string()),
+///   comment: Some("Brand color aliasing blue".to_string())
+/// };
+/// let reference_token = Token {
+///   name: "color.primary".to_string(),
+///   value: TokenValue::Reference("color.brand.50".to_string()),
+///   comment: Some("Primary color referencing brand color".to_string())
+/// };
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum TokenValue {
@@ -14,6 +44,11 @@ pub enum TokenValue {
   Null
 }
 
+/// Represents a design token with a name, value, and optional comment.
+/// - name: The name of the token.
+/// - value: The value of the token, which can be of various types defined in Token
+/// Value.
+/// - comment: An optional comment providing additional context about the token.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Token {
   pub name: String,
