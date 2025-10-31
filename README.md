@@ -36,3 +36,10 @@ substrate --config path/to/config.json
   ]
 }
 ```
+
+<details>
+<summary>FAQ</summary>
+
+> Yes I know the code is terrible...
+
+</details>
