@@ -1,14 +1,20 @@
+
 [package]
-name = "substrate-color-gen"
-version = "0.0.1"
-edition = "2024"
+authors = ["LongYinan <lynweklm@gmail.com>"]
+edition = "2021"
+name = "color_gen"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "1.0.100"
-bigcolor = "1.2.1"
-clap = { version = "4.5.49", features = ["derive"] }
-itertools = "0.14.0"
-lazy_static = "1.5.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
-tera = "1.20.0"
+napi = "3.0.0"
+napi-derive = "3.0.0"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
+strip = "symbols"
