@@ -358,7 +358,10 @@ enum Commands {
   },
 
   #[command(about = "Manage tokens")]
-  Tokens { },
+  Tokens {
+    #[command(subcommand)]
+    commands: design_token::DesignTokenCommands,
+  },
 
   #[command(about = "Initialize a new project")]
   Init { },
@@ -381,9 +384,7 @@ fn main() {
       todo!()
     },
     Commands::Config { commands } => config::handle_config_commands(commands),
-    Commands::Tokens { } => {
-      todo!()
-    },
+    Commands::Tokens { commands } => design_token::handle_design_token_commands(commands),
     Commands::Init { } => {
       todo!()
     },

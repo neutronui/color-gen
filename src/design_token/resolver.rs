@@ -2,6 +2,7 @@ use indexmap::IndexMap;
 use thiserror::Error;
 
 use crate::design_token::token::{Token, TokenSet, TokenValue};
+use crate::design_token::css_var::{css_var, CssKeyOptions};
 
 #[derive(Debug, Error)]
 pub enum ResolveError {
@@ -14,6 +15,11 @@ pub enum ResolveError {
 }
 
 pub fn resolve_tokens(tokens: &TokenSet) -> Result<TokenSet, ResolveError> {
+  let opts = CssKeyOptions::default();
+  resolve_tokens_with_options(tokens, &opts)
+}
+
+pub fn resolve_tokens_with_options(tokens: &TokenSet, opts: &CssKeyOptions) -> Result<TokenSet, ResolveError> {
   let mut resolved: TokenSet = IndexMap::new();
   let mut stack: Vec<String> = Vec::new();
 
@@ -25,7 +31,7 @@ pub fn resolve_tokens(tokens: &TokenSet) -> Result<TokenSet, ResolveError> {
     stack.clear();
     stack.push(key.clone());
 
-    let val = resolve_value(key, &token.value, tokens, &mut resolved, &mut stack)
+    let val = resolve_value(key, &token.value, tokens, &mut resolved, &mut stack, opts)
       .map_err(|e| match e {
         ResolveError::CyclicReference(s) => ResolveError::CyclicReference(format!(
           "{} -> {}",
@@ -55,6 +61,7 @@ fn resolve_value(
   tokens: &TokenSet,
   resolved: &mut TokenSet,
   stack: &mut Vec<String>,
+  opts: &CssKeyOptions,
 ) -> Result<TokenValue, ResolveError> {
   match val {
     TokenValue::Reference(target_path) => {
@@ -62,8 +69,8 @@ fn resolve_value(
         return Err(ResolveError::TokenNotFound(format!("{} (referenced by {})", target_path, name)));
       }
 
-      let css_var = format!("--{}", target_path.replace('.', "-"));
-      Ok(TokenValue::String(format!("var({})", css_var)))
+      let key = css_var(target_path, opts);
+      Ok(TokenValue::String(key))
     }
     TokenValue::Alias(target_path) => {
       if stack.contains(&target_path.clone()) {
@@ -84,7 +91,8 @@ fn resolve_value(
         &target_token.value,
         tokens,
         resolved,
-        stack
+        stack,
+        opts
       )?;
       stack.pop();
 
@@ -99,7 +107,7 @@ fn resolve_value(
     TokenValue::Object(map) => {
       let mut new_map = IndexMap::new();
       for (k, v) in map.iter() {
-        let rv = resolve_value(name, v, tokens, resolved, stack)?;
+        let rv = resolve_value(name, v, tokens, resolved, stack, opts)?;
         new_map.insert(k.clone(), rv);
       }
       Ok(TokenValue::Object(new_map))
@@ -108,7 +116,6 @@ fn resolve_value(
   }
 }
 
-// TODO: actually merge token sets properly
 pub fn merge_token_sets(
   base: &TokenSet,
   overrides: &TokenSet
@@ -134,6 +141,7 @@ fn resolved_token_comment<'a>(
   }
 }
 
+// MARK: - TESTS
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -183,7 +191,7 @@ mod tests {
 
     assert_eq!(
       resolved.get("button.background").unwrap().value,
-      TokenValue::String("var(--color-secondary)".to_string())
+      TokenValue::String(css_var("color.secondary", &CssKeyOptions::default()))
     );
   }
 
@@ -270,7 +278,7 @@ mod tests {
 
     assert_eq!(
       resolved.get("color.background").unwrap().value,
-      TokenValue::String("var(--color-primary)".to_string())
+      TokenValue::String(css_var("color.primary", &CssKeyOptions::default()))
     );
 
     assert_eq!(
@@ -298,6 +306,29 @@ mod tests {
     assert_eq!(
       resolved.get("number.pi").unwrap().value,
       TokenValue::Number(3.14159)
+    );
+  }
+
+  #[test]
+  fn test_resolve_with_prefix_options() {
+    let mut tokens: TokenSet = IndexMap::new();
+
+    tokens.insert(
+      "color.primary".to_string(),
+      Token { name: "color.primary".to_string(), value: TokenValue::String("#112233".to_string()), comment: None }
+    );
+
+    tokens.insert(
+      "button.background".to_string(),
+      Token { name: "button.background".to_string(), value: TokenValue::Reference("color.primary".to_string()), comment: None }
+    );
+
+    let opts = CssKeyOptions { prefix: Some("app".into()), ..Default::default() };
+    let resolved = super::resolve_tokens_with_options(&tokens, &opts).unwrap();
+
+    assert_eq!(
+      resolved.get("button.background").unwrap().value,
+      TokenValue::String(css_var("color.primary", &opts))
     );
   }
 }

@@ -212,6 +212,20 @@ mod tests {
     }
 
     #[test]
+    fn css_var_default_reference_style() {
+      let opts = CssKeyOptions::default();
+      assert_eq!(css_var("a.b.c", &opts), "var(--a-b-c)");
+      assert_eq!(css_var("button/Primary.sizeLg", &opts), "var(--button-primary-size-lg)");
+    }
+
+    #[test]
+    fn css_var_with_prefix_reference_style() {
+      let opts = CssKeyOptions { prefix: Some("app".into()), ..Default::default() };
+      assert_eq!(css_var("a.b.c", &opts), "var(--app-a-b-c)");
+      assert_eq!(css_var("Color.Primary", &opts), "var(--app-color-primary)");
+    }
+
+    #[test]
     fn empty_like_inputs_do_not_break() {
       let opts = CssKeyOptions::default();
       assert_eq!(make_css_custom_property_key("", &opts), "--");
