@@ -307,10 +307,15 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use platform_dirs::{AppDirs, UserDirs};
 use lazy_static::lazy_static;
-use simply_colored::*;
+
+mod config;
+mod design_token;
+mod new;
+mod theme;
+mod utils;
 
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(version, about)]
 struct Cli {
   #[command(subcommand)]
   command: Commands,
@@ -354,23 +359,8 @@ enum Commands {
   #[command(about = "Manage configuration")]
   Config {
     #[command(subcommand)]
-    commands: ConfigCommands,
+    commands: config::ConfigCommands,
   },
-}
-
-#[derive(Subcommand)]
-enum ConfigCommands {
-  #[command(about = "Show current config path")]
-  Path,
-
-  #[command(about = "Open config for editing")]
-  Edit { },
-
-  #[command()]
-  Get { },
-
-  #[command()]
-  Set { },
 }
 
 lazy_static! {
@@ -378,20 +368,8 @@ lazy_static! {
   pub static ref USER_DIRS: UserDirs = UserDirs::new().unwrap();
 }
 
-fn ensure_config_dir(path: &PathBuf) {
-  if !path.exists() {
-    std::fs::create_dir_all(path).expect("Could not create config directory");
-  }
-}
-
-fn hyperlink(link: impl core::fmt::Display, text: impl core::fmt::Display) -> String {
-  format!("\x1b]8;;{link}\x1b\\{text}\x1b]8;;\x1b\\")
-}
-
 fn main() {
   let cli = Cli::parse();
-
-  ensure_config_dir(&APP_DIRS.config_dir);
 
   match &cli.command {
     Commands::Theme { } => {
@@ -400,21 +378,6 @@ fn main() {
     Commands::Tokens { } => {
       todo!()
     },
-    Commands::Config { commands } => {
-      match commands {
-        ConfigCommands::Path => {
-          println!("{DIM_YELLOW}Config path: {RESET}{BOLD}{:?}{RESET}", APP_DIRS.config_dir);
-        },
-        ConfigCommands::Edit {} => {
-          todo!()
-        },
-        ConfigCommands::Get {} => {
-          todo!()
-        },
-        ConfigCommands::Set {} => {
-          todo!()
-        }
-      }
-    }
+    Commands::Config { commands } => config::handle_config_commands(commands)
   }
 }
