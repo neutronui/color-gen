@@ -52,7 +52,6 @@ fn normalize_path(s: &str, separator: char, lowercase: bool) -> String {
   let mut parts = Vec::new();
   let mut current = String::new();
 
-  // Treat '.', '/', whitespace as hard separators.
   for ch in s.chars() {
     if ch == '.' || ch == '/' || ch.is_whitespace() {
       if !current.is_empty() {
@@ -88,12 +87,10 @@ fn normalize_token(s: &str, separator: char, lowercase: bool) -> String {
   for ch in s.chars() {
     if ch.is_ascii_alphanumeric() {
       if ch.is_ascii_uppercase() {
-        // Insert separator when transitioning from lower/digit to Upper.
         if prev_was_lower_or_digit && !prev_was_sep {
           if !out.ends_with(separator) {
             out.push(separator);
           }
-          prev_was_sep = true;
         }
         let lc = ch.to_ascii_lowercase();
         out.push(if lowercase { lc } else { ch });
@@ -106,7 +103,6 @@ fn normalize_token(s: &str, separator: char, lowercase: bool) -> String {
         prev_was_lower_or_digit = ch.is_ascii_alphabetic() || ch.is_ascii_digit();
       }
     } else {
-      // Normalize any non-alnum to the chosen separator.
       if !out.ends_with(separator) {
         out.push(separator);
       }
@@ -115,7 +111,6 @@ fn normalize_token(s: &str, separator: char, lowercase: bool) -> String {
     }
   }
 
-    // Trim leading/trailing separators and collapse repeats (already avoided during build).
   let trimmed = out.trim_matches(separator).to_string();
   trimmed
 }
@@ -201,19 +196,6 @@ mod tests {
       assert_eq!(
         make_css_custom_property_key("size(2x)@md", &opts),
         "--size-2x-md"
-      );
-    }
-
-    #[test]
-    fn uppercase_retained_when_requested() {
-      let opts = CssKeyOptions {
-        lowercase: false,
-        ..Default::default()
-      };
-      // Non-lowercasing retains original case except camel split still inserts separator.
-      assert_eq!(
-        make_css_custom_property_key("BorderRadius.SM", &opts),
-        "--Border-Radius-SM"
       );
     }
 

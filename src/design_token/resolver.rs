@@ -108,6 +108,20 @@ fn resolve_value(
   }
 }
 
+// TODO: actually merge token sets properly
+pub fn merge_token_sets(
+  base: &TokenSet,
+  overrides: &TokenSet
+) -> TokenSet {
+  let mut out = base.clone();
+
+  for (key, token) in overrides.iter() {
+    out.insert(key.clone(), token.clone());
+  }
+
+  out
+}
+
 fn resolved_token_comment<'a>(
   resolved: &'a TokenSet,
   tokens: &'a TokenSet,
@@ -117,5 +131,173 @@ fn resolved_token_comment<'a>(
     t.comment.clone()
   } else {
     tokens.get(key).and_then(|t| t.comment.clone())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_resolve_tokens() {
+    let mut tokens: TokenSet = IndexMap::new();
+
+    tokens.insert(
+      "color.primary".to_string(),
+      Token {
+        name: "color.primary".to_string(),
+        value: TokenValue::String("#ff0000".to_string()),
+        comment: None,
+      }
+    );
+
+    tokens.insert(
+      "color.secondary".to_string(),
+      Token {
+        name: "color.secondary".to_string(),
+        value: TokenValue::Alias("color.primary".to_string()),
+        comment: None,
+      }
+    );
+
+    tokens.insert(
+      "button.background".to_string(),
+      Token {
+        name: "button.background".to_string(),
+        value: TokenValue::Reference("color.secondary".to_string()),
+        comment: None,
+      }
+    );
+
+    let resolved = resolve_tokens(&tokens).unwrap();
+
+    assert_eq!(
+      resolved.get("color.primary").unwrap().value,
+      TokenValue::String("#ff0000".to_string())
+    );
+
+    assert_eq!(
+      resolved.get("color.secondary").unwrap().value,
+      TokenValue::String("#ff0000".to_string())
+    );
+
+    assert_eq!(
+      resolved.get("button.background").unwrap().value,
+      TokenValue::String("var(--color-secondary)".to_string())
+    );
+  }
+
+  #[test]
+  fn test_cyclic_reference() {
+    let mut tokens: TokenSet = IndexMap::new();
+
+    tokens.insert(
+      "a".to_string(),
+      Token {
+        name: "a".to_string(),
+        value: TokenValue::Alias("b".to_string()),
+        comment: None,
+      }
+    );
+
+    tokens.insert(
+      "b".to_string(),
+      Token {
+        name: "b".to_string(),
+        value: TokenValue::Alias("a".to_string()),
+        comment: None,
+      }
+    );
+
+    let result = resolve_tokens(&tokens);
+    assert!(matches!(result, Err(ResolveError::CyclicReference(_))));
+  }
+
+  #[test]
+  fn test_from_json() {
+    let json_data = r##"
+    {
+      "color.primary": {
+        "name": "color.primary",
+        "value": "#00ff00"
+      },
+      "color.accent": {
+        "name": "color.accent",
+        "value": { "alias": "color.primary" }
+      },
+      "color.background": {
+        "name": "color.background",
+        "value": { "reference": "color.primary"  }
+      },
+      "font": {
+        "name": "font",
+        "value": {
+          "size": "16px",
+          "weight": 400,
+          "lineHeight": 1.5,
+          "color": { "alias": "color.primary" }
+        }
+      },
+      "null": {
+        "name": "null",
+        "value": null
+      },
+      "boolean.true": {
+        "name": "boolean.true",
+        "value": true
+      },
+      "number.pi": {
+        "name": "number.pi",
+        "value": 3.14159
+      }
+    }
+    "##;
+
+    let tokens: TokenSet = serde_json::from_str(json_data).unwrap();
+    let resolved = resolve_tokens(&tokens).unwrap();
+
+    println!("{:#?}", tokens);
+
+    assert_eq!(
+      resolved.get("color.primary").unwrap().value,
+      TokenValue::String("#00ff00".to_string())
+    );
+
+    assert_eq!(
+      resolved.get("color.accent").unwrap().value,
+      TokenValue::String("#00ff00".to_string())
+    );
+
+    assert_eq!(
+      resolved.get("color.background").unwrap().value,
+      TokenValue::String("var(--color-primary)".to_string())
+    );
+
+    assert_eq!(
+      resolved.get("font").unwrap().value,
+      TokenValue::Object({
+        let mut map = IndexMap::new();
+        map.insert("size".to_string(), TokenValue::String("16px".to_string()));
+        map.insert("weight".to_string(), TokenValue::Number(400.0));
+        map.insert("lineHeight".to_string(), TokenValue::Number(1.5));
+        map.insert("color".to_string(), TokenValue::String("#00ff00".to_string()));
+        map
+      })
+    );
+
+    assert_eq!(
+      resolved.get("null").unwrap().value,
+      TokenValue::Null
+    );
+
+    assert_eq!(
+      resolved.get("boolean.true").unwrap().value,
+      TokenValue::Bool(true)
+    );
+
+    assert_eq!(
+      resolved.get("number.pi").unwrap().value,
+      TokenValue::Number(3.14159)
+    );
   }
 }
