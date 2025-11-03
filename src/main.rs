@@ -314,6 +314,7 @@ mod design_token;
 mod init;
 mod theme;
 mod utils;
+mod tokens;
 
 #[derive(Parser)]
 #[command(version, about)]
