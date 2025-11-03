@@ -308,9 +308,10 @@ use clap::{Parser, Subcommand};
 use platform_dirs::{AppDirs, UserDirs};
 use lazy_static::lazy_static;
 
+mod build;
 mod config;
 mod design_token;
-mod new;
+mod init;
 mod theme;
 mod utils;
 
@@ -319,9 +320,6 @@ mod utils;
 struct Cli {
   #[command(subcommand)]
   command: Commands,
-
-  // #[arg(short, long)]
-  // config: PathBuf,
 
   #[arg(long)]
   cwd: Option<PathBuf>,
@@ -350,17 +348,24 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-  #[command(about = "Manage themes")]
-  Theme { },
-
-  #[command(about = "Manage tokens")]
-  Tokens { },
+  #[command(about = "Build themes and tokens")]
+  Build { },
 
   #[command(about = "Manage configuration")]
   Config {
     #[command(subcommand)]
     commands: config::ConfigCommands,
   },
+
+  #[command(about = "Manage tokens")]
+  Tokens { },
+
+  #[command(about = "Initialize a new project")]
+  Init { },
+
+  #[command(about = "Manage themes")]
+  Theme { },
+
 }
 
 lazy_static! {
@@ -372,12 +377,18 @@ fn main() {
   let cli = Cli::parse();
 
   match &cli.command {
-    Commands::Theme { } => {
+    Commands::Build { } => {
       todo!()
     },
+    Commands::Config { commands } => config::handle_config_commands(commands),
     Commands::Tokens { } => {
       todo!()
     },
-    Commands::Config { commands } => config::handle_config_commands(commands)
+    Commands::Init { } => {
+      todo!()
+    },
+    Commands::Theme { } => {
+      todo!()
+    },
   }
 }

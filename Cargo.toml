@@ -18,6 +18,7 @@ path = "src/main.rs"
 [dependencies]
 bigcolor = "1.2.1"
 clap = { version = "4.5.49", features = ["derive"] }
+indexmap = { version = "2.12.0", features= ["serde"] }
 itertools = "0.14.0"
 lazy_static = "1.5.0"
 open = "5.3.2"
@@ -26,4 +27,5 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 simply_colored = "0.1.4"
 tera = "1.20.0"
+thiserror = "2.0.17"
 toml = "0.9.8"
