@@ -49,6 +49,7 @@ fn main() {
   let mut cli = Cli::new();
   cli.register_args::<CliArgs>();
   cli.register_commands::<config::cli::Commands>(config::cli::handle);
+  cli.register_commands::<transformer::cli::Commands>(transformer::cli::handle);
 
   let matches = cli.parse_and_dispatch();
   // let is_watching = matches.get_flag("watch");

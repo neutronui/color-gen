@@ -1,0 +1,22 @@
+{
+  "transforms": [
+    {
+      "from": "test/foo",
+      "to": [
+        {
+          "format": "Css",
+          "output": "test/test"
+        }
+      ]
+    },
+    {
+      "from": "test/bar",
+      "to": [
+        {
+          "format": "Json",
+          "output": "test/bar_output"
+        }
+      ]
+    }
+  ]
+}
