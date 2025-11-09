@@ -3,7 +3,10 @@ use simply_colored::*;
 use open::that;
 use crate::APP_DIRS;
 
+mod config;
 mod utils;
+
+pub use config::*;
 
 #[derive(Subcommand)]
 pub enum ConfigCommands {
