@@ -45,34 +45,13 @@ struct CliArgs {
   no_cache: bool
 }
 
-mod test {
-  use clap::{Parser};
-
-  #[derive(Debug, Parser)]
-  pub enum Commands {
-    Foo {
-      #[arg(short, long)]
-      bar: String,
-    }
-  }
-
-  pub fn handle(cmd: &Commands) {
-    match cmd {
-      Commands::Foo { bar } => {
-        println!("Foo command executed with bar: {}", bar);
-      }
-    }
-  }
-}
-
 fn main() {
   let mut cli = Cli::new();
   cli.register_args::<CliArgs>();
-  cli.register_commands::<test::Commands, _>(test::handle);
-  cli.register_commands::<config::cli::Commands, _>(config::cli::handle);
+  cli.register_commands::<config::cli::Commands>(config::cli::handle);
 
-  let matches = cli.command.get_matches();
-  let is_watching = matches.get_flag("watch");
+  let matches = cli.parse_and_dispatch();
+  // let is_watching = matches.get_flag("watch");
 
-  println!("Is watching: {}", is_watching);
+  // println!("Is watching: {}", is_watching);
 }

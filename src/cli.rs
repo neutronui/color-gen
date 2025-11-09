@@ -1,8 +1,19 @@
+use core::fmt;
+
 use clap::{ArgMatches, Args, Command, FromArgMatches, Subcommand};
 
-#[derive(Debug)]
 pub struct Cli {
-  pub command: Command
+  pub command: Command,
+  handlers: Vec<Box<dyn Fn(&ArgMatches) + Send + Sync>>
+}
+
+impl fmt::Debug for Cli {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_struct("Cli")
+      .field("command", &self.command)
+      .field("handlers_count", &self.handlers.len())
+      .finish()
+  }
 }
 
 impl Cli {
@@ -13,29 +24,31 @@ impl Cli {
       .about(env!("CARGO_PKG_DESCRIPTION"));
 
     Self {
-      command
+      command,
+      handlers: Vec::new()
     }
   }
 
-  pub fn register_commands<T: Subcommand, F>(&mut self, handler: F) -> &Self where F: for<'a> Fn(&'a T) {
-    let cli = T::augment_subcommands(self.command.clone());
-    let matches = cli.clone().get_matches();
-    handler(&extract::<T>(&matches).unwrap());
-    
-    self.command = cli;
+  pub fn register_commands<T: Subcommand>(&mut self, handler: fn(&T)) -> &Self where T: Subcommand + FromArgMatches + 'static {
+    self.command = T::augment_subcommands(self.command.clone());
+    self.handlers.push(Box::new(move |matches: &ArgMatches| {
+      if let Ok(cmd) = T::from_arg_matches(matches) {
+        handler(&cmd)
+      }
+    }));
     self
   }
 
   pub fn register_args<T: Args>(&mut self) -> &Self {
-    let cli = T::augment_args(self.command.clone());
-    
-    self.command = cli;
+    self.command = T::augment_args(self.command.clone());
     self
   }
-}
 
-fn extract<T>(matches: &ArgMatches) -> Option<T> where T: Subcommand + FromArgMatches {
-  T::from_arg_matches(matches)
-    .map_err(|err| err.exit())
-    .ok()
+  pub fn parse_and_dispatch(&self) -> ArgMatches {
+    let matches = self.command.clone().get_matches();
+    for h in &self.handlers {
+      h(&matches);
+    }
+    matches
+  }
 }
