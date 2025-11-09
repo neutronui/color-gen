@@ -69,6 +69,7 @@ fn main() {
   let mut cli = Cli::new();
   cli.register_args::<CliArgs>();
   cli.register_commands::<test::Commands, _>(test::handle);
+  cli.register_commands::<config::cli::Commands, _>(config::cli::handle);
 
   let matches = cli.command.get_matches();
   let is_watching = matches.get_flag("watch");
